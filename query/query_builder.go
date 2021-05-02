@@ -82,9 +82,9 @@ func getColumnNameFromSqlBuilderTag(typeOfField reflect.StructField) *string {
 	return nil*/
 }
 func (b *Builder) BuildQuery(sm interface{}) (string, []interface{}) {
-	return BuildQuery(sm, b.TableName, b.ModelType, b.Driver, b.BuildParam)
+	return Build(sm, b.TableName, b.ModelType, b.Driver, b.BuildParam)
 }
-func BuildQuery(sm interface{}, tableName string, modelType reflect.Type, driver string, buildParam func(int) string) (string, []interface{}) {
+func Build(sm interface{}, tableName string, modelType reflect.Type, driver string, buildParam func(int) string) (string, []interface{}) {
 	s1 := ""
 	rawConditions := make([]string, 0)
 	queryValues := make([]interface{}, 0)

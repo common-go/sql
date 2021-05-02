@@ -26,7 +26,7 @@ const (
 	DriverNotSupport = "no support"
 )
 
-func OpenByConfig(c DatabaseConfig) (*sql.DB, error) {
+func OpenByConfig(c Config) (*sql.DB, error) {
 	if c.Mock {
 		return nil, nil
 	}
@@ -37,7 +37,7 @@ func OpenByConfig(c DatabaseConfig) (*sql.DB, error) {
 		return Open(c, durations...)
 	}
 }
-func open(c DatabaseConfig) (*sql.DB, error) {
+func open(c Config) (*sql.DB, error) {
 	dsn := c.DataSourceName
 	if len(dsn) == 0 {
 		dsn = BuildDataSourceName(c)
@@ -57,7 +57,7 @@ func open(c DatabaseConfig) (*sql.DB, error) {
 	}
 	return db, err
 }
-func Open(c DatabaseConfig, retries ...time.Duration) (*sql.DB, error) {
+func Open(c Config, retries ...time.Duration) (*sql.DB, error) {
 	if c.Mock {
 		return nil, nil
 	}
@@ -83,7 +83,7 @@ func Open(c DatabaseConfig, retries ...time.Duration) (*sql.DB, error) {
 		return db, err
 	}
 }
-func BuildDataSourceName(c DatabaseConfig) string {
+func BuildDataSourceName(c Config) string {
 	if c.Driver == "postgres" {
 		uri := fmt.Sprintf("user=%s dbname=%s password=%s host=%s port=%d sslmode=disable", c.User, c.Database, c.Password, c.Host, c.Port)
 		return uri
@@ -1050,7 +1050,7 @@ func MapFromBoolToDB(model *map[string]interface{}, modelType reflect.Type) {
 			if index > -1 {
 				valueS := modelType.Field(index).Tag.Get(strconv.FormatBool(boolValue))
 				valueInt, err := strconv.Atoi(valueS)
-				if err != nil{
+				if err != nil {
 					(*model)[colName] = valueS
 				} else {
 					(*model)[colName] = valueInt
@@ -1071,7 +1071,7 @@ func StructScan(s interface{}, columns []string, fieldsIndex map[string]int, ind
 		if columns == nil {
 			for i := 0; i < maps.NumField(); i++ {
 				tagBool := modelType.Field(i).Tag.Get("true")
-				if tagBool == ""{
+				if tagBool == "" {
 					r = append(r, maps.Field(i).Addr().Interface())
 				} else {
 					var str string
@@ -1104,10 +1104,10 @@ func StructScan(s interface{}, columns []string, fieldsIndex map[string]int, ind
 					continue
 				}
 				modelField = modelType.Field(index)
-				valueField =maps.Field(index)
+				valueField = maps.Field(index)
 			}
 			tagBool := modelField.Tag.Get("true")
-			if tagBool == ""{
+			if tagBool == "" {
 				r = append(r, valueField.Addr().Interface())
 			} else {
 				var str string
@@ -1120,11 +1120,11 @@ func StructScan(s interface{}, columns []string, fieldsIndex map[string]int, ind
 	return
 }
 
-func SwapValuesToBool(s interface{}, swap *map[int]interface{})  {
+func SwapValuesToBool(s interface{}, swap *map[int]interface{}) {
 	if s != nil {
 		modelType := reflect.TypeOf(s).Elem()
 		maps := reflect.Indirect(reflect.ValueOf(s))
-		for index, element := range (*swap){
+		for index, element := range (*swap) {
 			var isBool bool
 			boolStr := modelType.Field(index).Tag.Get("true")
 			var dbValue = element.(*string)

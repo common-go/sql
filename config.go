@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-type DatabaseConfig struct {
+type Config struct {
 	MultiStatements bool        `mapstructure:"multi_statements" json:"multiStatements,omitempty" gorm:"column:multistatements" bson:"multiStatements,omitempty" dynamodbav:"multiStatements,omitempty" firestore:"multiStatements,omitempty"`
 	DataSourceName  string      `mapstructure:"data_source_name" json:"dataSourceName,omitempty" gorm:"column:datasourcename" bson:"dataSourceName,omitempty" dynamodbav:"dataSourceName,omitempty" firestore:"dataSourceName,omitempty"`
 	Driver          string      `mapstructure:"driver" json:"driver,omitempty" gorm:"column:driver" bson:"driver,omitempty" dynamodbav:"driver,omitempty" firestore:"driver,omitempty"`

@@ -3,13 +3,12 @@ package query
 import (
 	"database/sql"
 	"fmt"
+	s "github.com/core-go/search"
 	"log"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
-
-	se "github.com/common-go/search"
 )
 
 const (
@@ -83,9 +82,9 @@ func getColumnNameFromSqlBuilderTag(typeOfField reflect.StructField) *string {
 	return nil*/
 }
 func (b *Builder) BuildQuery(sm interface{}) (string, []interface{}) {
-	return Build(sm, b.TableName, b.ModelType, b.Driver, b.BuildParam)
+	return BuildQuery(sm, b.TableName, b.ModelType, b.Driver, b.BuildParam)
 }
-func Build(sm interface{}, tableName string, modelType reflect.Type, driver string, buildParam func(int) string) (string, []interface{}) {
+func BuildQuery(sm interface{}, tableName string, modelType reflect.Type, driver string, buildParam func(int) string) (string, []interface{}) {
 	s1 := ""
 	rawConditions := make([]string, 0)
 	queryValues := make([]interface{}, 0)
@@ -112,7 +111,7 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 		typeOfField := value.Type().Field(i)
 		param := buildParam(marker + 1)
 
-		if v, ok := x.(*se.SearchModel); ok {
+		if v, ok := x.(*s.SearchModel); ok {
 			if len(v.Fields) > 0 {
 				for _, key := range v.Fields {
 					i, _, columnName := getFieldByJson(modelType, key)
@@ -179,7 +178,7 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 			}
 			value2 = s0
 		}
-		if v, ok := x.(*se.SearchModel); ok {
+		if v, ok := x.(*s.SearchModel); ok {
 			if len(v.Excluding) > 0 {
 				for key, val := range v.Excluding {
 					index, _, columnName := getFieldByJson(value.Type(), key)
@@ -271,7 +270,7 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 				}
 				marker++
 			}
-		} else if dateRange, ok := x.(se.DateRange); ok {
+		} else if dateRange, ok := x.(s.DateRange); ok {
 			rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
 			queryValues = append(queryValues, dateRange.StartDate)
 			var eDate = dateRange.EndDate.Add(time.Hour * 24)
@@ -279,7 +278,7 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 			rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
 			queryValues = append(queryValues, dateRange.EndDate)
 			marker += 2
-		} else if dateRange, ok := x.(*se.DateRange); ok && dateRange != nil {
+		} else if dateRange, ok := x.(*s.DateRange); ok && dateRange != nil {
 			rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
 			queryValues = append(queryValues, dateRange.StartDate)
 			var eDate = dateRange.EndDate.Add(time.Hour * 24)
@@ -287,7 +286,7 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 			rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
 			queryValues = append(queryValues, dateRange.EndDate)
 			marker += 2
-		} else if dateTime, ok := x.(se.TimeRange); ok {
+		} else if dateTime, ok := x.(s.TimeRange); ok {
 			rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
 			queryValues = append(queryValues, dateTime.StartTime)
 			var eDate = dateTime.EndTime.Add(time.Hour * 24)
@@ -295,7 +294,7 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 			rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
 			queryValues = append(queryValues, dateTime.EndTime)
 			marker += 2
-		} else if dateTime, ok := x.(*se.TimeRange); ok && dateTime != nil {
+		} else if dateTime, ok := x.(*s.TimeRange); ok && dateTime != nil {
 			rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
 			queryValues = append(queryValues, dateTime.StartTime)
 			var eDate = dateTime.EndTime.Add(time.Hour * 24)
@@ -303,7 +302,7 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 			rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
 			queryValues = append(queryValues, dateTime.EndTime)
 			marker += 2
-		} else if numberRange, ok := x.(se.NumberRange); ok {
+		} else if numberRange, ok := x.(s.NumberRange); ok {
 			if numberRange.Min != nil {
 				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
 				queryValues = append(queryValues, numberRange.Min)
@@ -322,7 +321,7 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 				queryValues = append(queryValues, numberRange.Upper)
 				marker++
 			}
-		} else if numberRange, ok := x.(*se.NumberRange); ok && numberRange != nil {
+		} else if numberRange, ok := x.(*s.NumberRange); ok && numberRange != nil {
 			if numberRange.Min != nil {
 				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
 				queryValues = append(queryValues, numberRange.Min)

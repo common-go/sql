@@ -29,7 +29,7 @@ func NewHealthChecker(db *sql.DB, options ...string) *HealthChecker {
 	} else {
 		name = "sql"
 	}
-	return NewSqlHealthChecker(db, name, 4 * time.Second)
+	return NewSqlHealthChecker(db, name, 4*time.Second)
 }
 
 func (s *HealthChecker) Name() string {
@@ -52,14 +52,16 @@ func (s *HealthChecker) Check(ctx context.Context) (map[string]interface{}, erro
 		if err != nil {
 			return res, err
 		}
-		res["status"] = "success"
 		return res, err
 	case <-ctx.Done():
-		return nil, errors.New("connection timout")
+		return res, errors.New("connection timout")
 	}
 }
 
 func (s *HealthChecker) Build(ctx context.Context, data map[string]interface{}, err error) map[string]interface{} {
+	if err == nil {
+		return data
+	}
 	if data == nil {
 		data = make(map[string]interface{}, 0)
 	}

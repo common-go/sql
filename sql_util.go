@@ -45,14 +45,14 @@ func Query(ctx context.Context, db *sql.DB, results interface{}, sql string, val
 	defer rows.Close()
 	modelType := reflect.TypeOf(results).Elem().Elem()
 
-	fieldsIndex, er0 := GetColumnIndexes(modelType)
-	if er0 != nil {
-		return er0
-	}
-
-	tb, er2 := Scans(rows, modelType, fieldsIndex)
+	fieldsIndex, er2 := GetColumnIndexes(modelType)
 	if er2 != nil {
 		return er2
+	}
+
+	tb, er3 := Scans(rows, modelType, fieldsIndex)
+	if er3 != nil {
+		return er3
 	}
 	for _, element := range tb {
 		appendToArray(results, element)
@@ -73,15 +73,16 @@ func QueryTx(ctx context.Context, tx *sql.Tx, results interface{}, sql string, v
 		return er1
 	}
 	defer rows.Close()
-	modelType := reflect.TypeOf(results).Elem().Elem()
-	fieldsIndex, er0 := GetColumnIndexes(modelType)
-	if er0 != nil {
-		return er0
-	}
 
-	tb, er2 := Scans(rows, modelType, fieldsIndex)
+	modelType := reflect.TypeOf(results).Elem().Elem()
+	fieldsIndex, er2 := GetColumnIndexes(modelType)
 	if er2 != nil {
 		return er2
+	}
+
+	tb, er3 := Scans(rows, modelType, fieldsIndex)
+	if er3 != nil {
+		return er3
 	}
 	for _, element := range tb {
 		appendToArray(results, element)
@@ -102,15 +103,16 @@ func QueryByStatement(ctx context.Context, stm *sql.Stmt, results interface{}, v
 		return er1
 	}
 	defer rows.Close()
-	modelType := reflect.TypeOf(results).Elem().Elem()
-	fieldsIndex, er0 := GetColumnIndexes(modelType)
-	if er0 != nil {
-		return er0
-	}
 
-	tb, er2 := Scans(rows, modelType, fieldsIndex)
+	modelType := reflect.TypeOf(results).Elem().Elem()
+	fieldsIndex, er2 := GetColumnIndexes(modelType)
 	if er2 != nil {
 		return er2
+	}
+
+	tb, er3 := Scans(rows, modelType, fieldsIndex)
+	if er3 != nil {
+		return er3
 	}
 	for _, element := range tb {
 		appendToArray(results, element)
@@ -133,37 +135,13 @@ func QueryAndCount(ctx context.Context, db *sql.DB, results interface{}, count *
 	defer rows.Close()
 	modelType := reflect.TypeOf(results).Elem().Elem()
 
-	fieldsIndex, er0 := GetColumnIndexes(modelType)
-	if er0 != nil {
-		return er0
-	}
-
-	tb, c, er2 := ScansAndCount(rows, modelType, fieldsIndex)
-	*count = c
+	fieldsIndex, er2 := GetColumnIndexes(modelType)
 	if er2 != nil {
 		return er2
 	}
-	for _, element := range tb {
-		appendToArray(results, element)
-	}
-	er4 := rows.Close()
-	if er4 != nil {
-		return er4
-	}
-	// Rows.Err will report the last error encountered by Rows.Scan.
-	if er5 := rows.Err(); er5 != nil {
-		return er5
-	}
-	return nil
-}
 
-func QueryWithType(ctx context.Context, db *sql.DB, results interface{}, modelType reflect.Type, fieldsIndex map[string]int, sql string, values ...interface{}) error {
-	rows, er1 := db.QueryContext(ctx, sql, values...)
-	if er1 != nil {
-		return er1
-	}
-	defer rows.Close()
-	tb, er3 := Scans(rows, modelType, fieldsIndex)
+	tb, c, er3 := ScansAndCount(rows, modelType, fieldsIndex)
+	*count = c
 	if er3 != nil {
 		return er3
 	}
@@ -180,7 +158,6 @@ func QueryWithType(ctx context.Context, db *sql.DB, results interface{}, modelTy
 	}
 	return nil
 }
-
 func QueryRow(ctx context.Context, db *sql.DB, modelType reflect.Type, fieldsIndex map[string]int, sql string, values ...interface{}) (interface{}, error) {
 	strSQL := "limit 1"
 	driver := GetDriver(db)
@@ -201,7 +178,7 @@ func QueryRow(ctx context.Context, db *sql.DB, modelType reflect.Type, fieldsInd
 		return nil, er3
 	}
 	// Rows.Err will report the last error encountered by Rows.Scan.
-	if err := rows.Err(); err != nil {
+	if er4 := rows.Err(); er4 != nil {
 		return nil, er3
 	}
 	return tb, nil
@@ -220,7 +197,7 @@ func QueryRowTx(ctx context.Context, tx *sql.Tx, modelType reflect.Type, fieldsI
 		return nil, er3
 	}
 	// Rows.Err will report the last error encountered by Rows.Scan.
-	if err := rows.Err(); err != nil {
+	if er4 := rows.Err(); er4 != nil {
 		return nil, er3
 	}
 	return tb, nil
@@ -240,7 +217,7 @@ func QueryRowByStatement(ctx context.Context, stm *sql.Stmt, modelType reflect.T
 		return nil, er3
 	}
 	// Rows.Err will report the last error encountered by Rows.Scan.
-	if err := rows.Err(); err != nil {
+	if er4 := rows.Err(); er4 != nil {
 		return nil, er3
 	}
 	return tb, nil
@@ -257,9 +234,9 @@ func appendToArray(arr interface{}, item interface{}) interface{} {
 	return arr
 }
 func GetColumnIndexes(modelType reflect.Type) (map[string]int, error) {
-	mapp := make(map[string]int, 0)
+	ma := make(map[string]int, 0)
 	if modelType.Kind() != reflect.Struct {
-		return mapp, errors.New("bad type")
+		return ma, errors.New("bad type")
 	}
 	for i := 0; i < modelType.NumField(); i++ {
 		field := modelType.Field(i)
@@ -267,25 +244,25 @@ func GetColumnIndexes(modelType reflect.Type) (map[string]int, error) {
 		column, ok := FindTag(ormTag, "column")
 		column = strings.ToLower(column)
 		if ok {
-			mapp[column] = i
+			ma[column] = i
 		}
 	}
-	return mapp, nil
+	return ma, nil
 }
 
 func GetIndexesByTagJson(modelType reflect.Type) (map[string]int, error) {
-	mapp := make(map[string]int, 0)
+	ma := make(map[string]int, 0)
 	if modelType.Kind() != reflect.Struct {
-		return mapp, errors.New("bad type")
+		return ma, errors.New("bad type")
 	}
 	for i := 0; i < modelType.NumField(); i++ {
 		field := modelType.Field(i)
 		tagJson := field.Tag.Get("json")
 		if len(tagJson) > 0 {
-			mapp[tagJson] = i
+			ma[tagJson] = i
 		}
 	}
-	return mapp, nil
+	return ma, nil
 }
 
 func FindTag(tag string, key string) (string, bool) {
@@ -389,7 +366,6 @@ func ScansAndCount(rows *sql.Rows, modelType reflect.Type, fieldsIndex map[strin
 	return t, count, nil
 }
 
-//Rows
 func ScanByModelType(rows *sql.Rows, modelType reflect.Type) (t []interface{}, err error) {
 	for rows.Next() {
 		gTb := reflect.New(modelType).Interface()
@@ -403,7 +379,6 @@ func ScanByModelType(rows *sql.Rows, modelType reflect.Type) (t []interface{}, e
 	return
 }
 
-//Rows
 func Scan(rows *sql.Rows, structType reflect.Type, fieldsIndex map[string]int) (t interface{}, err error) {
 	columns, er0 := GetColumns(rows.Columns())
 	err = er0

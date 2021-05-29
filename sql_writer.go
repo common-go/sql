@@ -36,9 +36,9 @@ func (w *SqlWriter) Write(ctx context.Context, model interface{}) error {
 		if er0 != nil {
 			return er0
 		}
-		_, err := Upsert(ctx, w.db, w.tableName, m2)
+		_, err := Save(ctx, w.db, w.tableName, m2)
 		return err
 	}
-	_, err := Upsert(ctx, w.db, w.tableName, model)
+	_, err := Save(ctx, w.db, w.tableName, model)
 	return err
 }

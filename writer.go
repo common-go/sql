@@ -9,6 +9,7 @@ import (
 
 type Writer struct {
 	*Loader
+	maps           map[string]string
 	Mapper         Mapper
 	versionField   string
 	versionIndex   int
@@ -39,7 +40,7 @@ func NewSqlWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Typ
 			return &Writer{Loader: loader, versionField: versionField, versionIndex: index, versionDBField: dbFieldName}
 		}
 	}
-	return &Writer{loader, mapper, versionField, -1, ""}
+	return &Writer{Loader: loader, Mapper: mapper, versionField: versionField, versionIndex: -1}
 }
 func NewWriterWithMap(db *sql.DB, tableName string, modelType reflect.Type, mapper Mapper, options ...func(i int) string) *Writer {
 	return NewSqlWriterWithVersion(db, tableName, modelType, "", mapper, options...)
@@ -80,9 +81,9 @@ func (s *Writer) Save(ctx context.Context, model map[string]interface{}) (int64,
 		if err != nil {
 			return 0, err
 		}
-		return Upsert(ctx, s.Database, s.table, m2)
+		return Save(ctx, s.Database, s.table, m2)
 	}
-	return Upsert(ctx, s.Database, s.table, model)
+	return Save(ctx, s.Database, s.table, model)
 }
 
 func (s *Writer) Delete(ctx context.Context, id interface{}) (int64, error) {
@@ -102,6 +103,6 @@ func (s *Writer) Patch(ctx context.Context, model map[string]interface{}) (int64
 			return 0, err
 		}
 	}
-	MapFromBoolToDB(&model, s.modelType)
+	MapToDB(&model, s.modelType)
 	return Patch(ctx, s.Database, s.table, model, s.modelType, s.BuildParam)
 }

@@ -34,7 +34,7 @@ func NewSqlLoader(db *sql.DB, tableName string, modelType reflect.Type, mp func(
 	} else {
 		buildParam = GetBuild(db)
 	}
-	_, idNames := FindNames(modelType)
+	_, idNames := FindPrimaryKeys(modelType)
 	mapJsonColumnKeys := MapJsonColumn(modelType)
 	modelsType := reflect.Zero(reflect.SliceOf(modelType)).Type()
 
@@ -50,9 +50,9 @@ func (s *Loader) Keys() []string {
 }
 
 func (s *Loader) All(ctx context.Context) (interface{}, error) {
-	queryGetAll := BuildSelectAllQuery(s.table)
+	query := BuildSelectAllQuery(s.table)
 	result := reflect.New(s.modelsType).Interface()
-	err := QueryWithType(ctx, s.Database, result, s.modelType, s.fieldsIndex, queryGetAll, s.BuildParam)
+	err := Query(ctx, s.Database, result, query)
 	if err == nil {
 		if s.Map != nil {
 			return MapModels(ctx, result, s.Map)

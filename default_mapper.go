@@ -27,13 +27,13 @@ func (d *DefaultMapper) DbToModel(ctx context.Context, model interface{}) (inter
 }
 
 func (d *DefaultMapper) DbToModels(ctx context.Context, models interface{}) (interface{}, error) {
-	objectValues := reflect.Indirect(reflect.ValueOf(models))
-	if objectValues.Kind() == reflect.Slice {
-		if objectValues.Len() == 0 {
+	vo := reflect.Indirect(reflect.ValueOf(models))
+	if vo.Kind() == reflect.Slice {
+		if vo.Len() == 0 {
 			return 0, nil
 		}
-		for i := 0; i < objectValues.Len(); i++ {
-			model := objectValues.Index(i).Addr()
+		for i := 0; i < vo.Len(); i++ {
+			model := vo.Index(i).Addr()
 			d.DbToModel(ctx, model)
 		}
 	}
@@ -58,13 +58,13 @@ func (d *DefaultMapper) ModelToDb(ctx context.Context, model interface{}) (inter
 }
 
 func (d *DefaultMapper) ModelsToDb(ctx context.Context, models interface{}) (interface{}, error) {
-	objectValues := reflect.Indirect(reflect.ValueOf(models))
-	if objectValues.Kind() == reflect.Slice {
-		if objectValues.Len() == 0 {
+	vo := reflect.Indirect(reflect.ValueOf(models))
+	if vo.Kind() == reflect.Slice {
+		if vo.Len() == 0 {
 			return 0, nil
 		}
-		for i := 0; i < objectValues.Len(); i++ {
-			model := objectValues.Index(i).Addr()
+		for i := 0; i < vo.Len(); i++ {
+			model := vo.Index(i).Addr()
 			d.ModelToDb(ctx, model)
 		}
 	}

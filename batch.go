@@ -212,7 +212,7 @@ func InsertInTransactionTx(ctx context.Context, db *sql.DB, tx *sql.Tx, tableNam
 		count := objectValues.Len()
 		return int64(count), err
 	}
-	return 0, fmt.Errorf("objects must be slice.")
+	return 0, fmt.Errorf("objects must be slice")
 }
 
 // Separate objects into several size
@@ -716,7 +716,7 @@ func BuildSqlParametersByColumns(columns []string, values []interface{}, n int, 
 }
 
 func BuildParamWithNull(colName string) string {
-	return fmt.Sprintf("%v = null", colName)
+	return QuoteColumnName(colName)+"=null"
 }
 func BuildSqlParametersAndValues(columns []string, values []interface{}, n *int, start int, joinStr string, buildParam func(int) string) (string, []interface{}, error) {
 	arr := make([]string, *n)

@@ -247,7 +247,6 @@ func InsertWithVersion(ctx context.Context, db *sql.DB, table string, model inte
 	if versionIndex < 0 {
 		return 0, errors.New("version index not found")
 	}
-
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -279,7 +278,6 @@ func InsertWithVersion(ctx context.Context, db *sql.DB, table string, model inte
 
 func Exec(ctx context.Context, stmt *sql.Stmt, values ...interface{}) (int64, error) {
 	result, err := stmt.ExecContext(ctx, values...)
-
 	if err != nil {
 		return -1, err
 	}
@@ -338,7 +336,7 @@ func UpdateWithVersion(ctx context.Context, db *sql.DB, table string, model inte
 }
 
 func Patch(ctx context.Context, db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type, options ...func(i int) string) (int64, error) {
-	idcolumNames, idJsonName := FindNames(modelType)
+	idcolumNames, idJsonName := FindPrimaryKeys(modelType)
 	columNames := FindJsonName(modelType)
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
@@ -362,7 +360,7 @@ func PatchWithVersion(ctx context.Context, db *sql.DB, table string, model map[s
 		return 0, errors.New("version's index not found")
 	}
 
-	idcolumNames, idJsonName := FindNames(modelType)
+	idcolumNames, idJsonName := FindPrimaryKeys(modelType)
 	columNames := FindJsonName(modelType)
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
@@ -434,39 +432,81 @@ func GetFieldByJson(modelType reflect.Type, jsonName string) (int, string, strin
 }
 
 func BuildUpdateSql(table string, model interface{}, i int, buildParam func(int) string) (string, []interface{}) {
-	mapData, mapKey, _ := BuildMapDataAndKeys(model, true)
+	mapData, mapKey, columns, keys := BuildMapDataAndKeys(model, true)
 	var values []interface{}
-
 	colSet := make([]string, 0)
 	colQuery := make([]string, 0)
 	colNumber := 1
-	for colName, v1 := range mapData {
-		if v1 != nil {
-			values = append(values, v1)
-			colSet = append(colSet, fmt.Sprintf("%v = "+buildParam(colNumber+i), colName))
-			colNumber++
-		} else {
-			colSet = append(colSet, BuildParamWithNull(colName))
+	for _, colName := range columns {
+		if v1, ok := mapData[colName]; ok {
+			if v1 != nil {
+				v3, ok3 := GetDBValue(v1)
+				if ok3 {
+					colSet = append(colSet, QuoteColumnName(colName)+"="+v3)
+				} else {
+					values = append(values, v1)
+					colSet = append(colSet, QuoteColumnName(colName)+"="+buildParam(colNumber+i))
+					colNumber++
+				}
+			} else {
+				colSet = append(colSet, BuildParamWithNull(colName))
+			}
 		}
 	}
-
-	for colName, v2 := range mapKey {
-		values = append(values, v2)
-		colQuery = append(colQuery, fmt.Sprintf("%v="+buildParam(colNumber+i), QuoteColumnName(colName)))
-		colNumber++
+	for _, colName := range keys {
+		if v2, ok := mapKey[colName]; ok {
+			v3, ok3 := GetDBValue(v2)
+			if ok3 {
+				colQuery = append(colQuery, QuoteColumnName(colName) + "=" + v3)
+			} else {
+				values = append(values, v2)
+				colQuery = append(colQuery, QuoteColumnName(colName)+"="+buildParam(colNumber+i))
+			}
+			colNumber++
+		}
 	}
 	queryWhere := strings.Join(colQuery, " and ")
 	querySet := strings.Join(colSet, ",")
 	query := fmt.Sprintf("update %v set %v where %v", table, querySet, queryWhere)
 	return query, values
 }
-
+func GetDBValue(v interface{}) (string, bool) {
+	switch v.(type) {
+	case string:
+		s0 := v.(string)
+		if len(s0) == 0 {
+			return "''", true
+		}
+		return "", false
+	case *string:
+		s1 := v.(*string)
+		if len(*s1) == 0 {
+			return "''", true
+		}
+		return "", false
+	case int:
+		return strconv.Itoa(v.(int)), true
+	case int64:
+		return strconv.FormatInt(v.(int64), 10), true
+	case int32:
+		return strconv.FormatInt(int64(v.(int32)), 10), true
+	case *int:
+		i1 := v.(*int)
+		return strconv.Itoa(*i1), true
+	case *int64:
+		i2 := v.(*int64)
+		return strconv.FormatInt(*i2, 10), true
+	case *int32:
+		i3 := v.(*int32)
+		return strconv.FormatInt(int64(*i3), 10), true
+	default:
+		return "", false
+	}
+}
 func BuildUpdateSqlWithVersion(table string, model interface{}, i int, versionIndex int, buildParam func(int) string) (string, []interface{}) {
 	if versionIndex < 0 {
 		panic("version's index not found")
-
 	}
-
 	valueOfModel := reflect.Indirect(reflect.ValueOf(model))
 	currentVersion := reflect.Indirect(valueOfModel.Field(versionIndex)).Int()
 	nextVersion := currentVersion + 1
@@ -475,7 +515,7 @@ func BuildUpdateSqlWithVersion(table string, model interface{}, i int, versionIn
 		panic(err)
 	}
 
-	mapData, mapKey, _ := BuildMapDataAndKeys(model, true)
+	mapData, mapKey, columns, keys := BuildMapDataAndKeys(model, true)
 	versionColName, exist := GetColumnNameByIndex(valueOfModel.Type(), versionIndex)
 	if !exist {
 		panic("version's column not found")
@@ -486,24 +526,37 @@ func BuildUpdateSqlWithVersion(table string, model interface{}, i int, versionIn
 	colSet := make([]string, 0)
 	colQuery := make([]string, 0)
 	colNumber := 1
-	for colName, v1 := range mapData {
-		if v1 != nil {
-			values = append(values, v1)
-			colSet = append(colSet, fmt.Sprintf("%v = "+buildParam(colNumber+i), colName))
-			colNumber++
-		} else {
-			colSet = append(colSet, BuildParamWithNull(colName))
+	for _, colName := range columns {
+		if v1, ok := mapData[colName]; ok {
+			if v1 != nil {
+				v3, ok3 := GetDBValue(v1)
+				if ok3 {
+					colSet = append(colSet, fmt.Sprintf("%v = "+v3, colName))
+				} else {
+					values = append(values, v1)
+					colQuery = append(colQuery, QuoteColumnName(colName) + "=" + buildParam(colNumber+i))
+					colNumber++
+				}
+			} else {
+				colSet = append(colSet, BuildParamWithNull(colName))
+			}
 		}
 	}
-
-	for colName, v2 := range mapKey {
-		values = append(values, v2)
-		colQuery = append(colQuery, fmt.Sprintf("%v="+buildParam(colNumber+i), QuoteColumnName(colName)))
-		colNumber++
+	for _, colName := range keys {
+		if v2, ok := mapKey[colName]; ok {
+			v3, ok3 := GetDBValue(v2)
+			if ok3 {
+				colQuery = append(colQuery, QuoteColumnName(colName) + "=" + v3)
+			} else {
+				values = append(values, v2)
+				colQuery = append(colQuery, QuoteColumnName(colName) + "=" + buildParam(colNumber+i))
+			}
+			colNumber++
+		}
 	}
-	queryWhere := strings.Join(colQuery, " AND ")
+	queryWhere := strings.Join(colQuery, " and ")
 	querySet := strings.Join(colSet, ",")
-	query := fmt.Sprintf("UPDATE %v SET %v WHERE %v", table, querySet, queryWhere)
+	query := fmt.Sprintf("update %v set %v where %v", table, querySet, queryWhere)
 	return query, values
 }
 
@@ -588,7 +641,7 @@ func BuildPatchWithVersion(table string, model map[string]interface{}, mapJsonCo
 		return "", nil
 	}
 	value = append(value, whereVal...)
-	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s",
+	query := fmt.Sprintf("update %s set %s where %s",
 		table,
 		sets,
 		where,
@@ -597,7 +650,6 @@ func BuildPatchWithVersion(table string, model map[string]interface{}, mapJsonCo
 }
 
 func BuildDelete(table string, ids map[string]interface{}, buildParam func(int) string) (string, []interface{}) {
-
 	var values []interface{}
 	var queryArr []string
 	i := 1
@@ -885,8 +937,8 @@ func ReplaceAtIndex(str string, replacement rune, index int) string {
 }
 
 func GetTableName(object interface{}) string {
-	objectValue := reflect.Indirect(reflect.ValueOf(object))
-	tableName := objectValue.MethodByName("TableName").Call([]reflect.Value{})
+	vo := reflect.Indirect(reflect.ValueOf(object))
+	tableName := vo.MethodByName("TableName").Call([]reflect.Value{})
 	return tableName[0].String()
 }
 func BuildParametersFrom(i int, numCol int, buildParam func(int) string) string {
@@ -988,14 +1040,14 @@ func Exist(ctx context.Context, db *sql.DB, sql string, args ...interface{}) (bo
 	return false, nil
 }
 func MapModels(ctx context.Context, models interface{}, mp func(context.Context, interface{}) (interface{}, error)) (interface{}, error) {
-	valueModelObject := reflect.Indirect(reflect.ValueOf(models))
-	if valueModelObject.Kind() == reflect.Ptr {
-		valueModelObject = reflect.Indirect(valueModelObject)
+	vo := reflect.Indirect(reflect.ValueOf(models))
+	if vo.Kind() == reflect.Ptr {
+		vo = reflect.Indirect(vo)
 	}
-	if valueModelObject.Kind() == reflect.Slice {
-		le := valueModelObject.Len()
+	if vo.Kind() == reflect.Slice {
+		le := vo.Len()
 		for i := 0; i < le; i++ {
-			x := valueModelObject.Index(i)
+			x := vo.Index(i)
 			k := x.Kind()
 			if k == reflect.Struct {
 				y := x.Addr().Interface()
@@ -1043,7 +1095,7 @@ func GetBuild(db *sql.DB) func(i int) string {
 	}
 }
 
-func MapFromBoolToDB(model *map[string]interface{}, modelType reflect.Type) {
+func MapToDB(model *map[string]interface{}, modelType reflect.Type) {
 	for colName, value := range *model {
 		if boolValue, boolOk := value.(bool); boolOk {
 			index := GetIndexByTag("json", colName, modelType)
@@ -1124,7 +1176,7 @@ func SwapValuesToBool(s interface{}, swap *map[int]interface{}) {
 	if s != nil {
 		modelType := reflect.TypeOf(s).Elem()
 		maps := reflect.Indirect(reflect.ValueOf(s))
-		for index, element := range (*swap) {
+		for index, element := range *swap {
 			var isBool bool
 			boolStr := modelType.Field(index).Tag.Get("true")
 			var dbValue = element.(*string)

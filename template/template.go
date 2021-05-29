@@ -1,4 +1,4 @@
-package sql
+package template
 
 import (
 	"bytes"
@@ -166,10 +166,10 @@ func BuildFormat(str string) StringFormat {
 	for {
 		i = strings.Index(str2b, "{")
 		if i >= 0 {
-			str3 = str2b[i + 1:]
+			str3 = str2b[i+1:]
 			j = strings.Index(str3, "}")
 			if j >= 0 {
-				pro := str2b[i+1:i+j+1]
+				pro := str2b[i+1 : i+j+1]
 				if IsValidProperty(pro) {
 					p := Parameter{}
 					p.Name = pro
@@ -196,7 +196,7 @@ func BuildFormat(str string) StringFormat {
 					from = 0
 				} else {
 					from = i + 1
-					str2b = str2[i + 1:]
+					str2b = str2[i+1:]
 				}
 			} else {
 				from = i + 1

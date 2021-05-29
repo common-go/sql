@@ -10,8 +10,8 @@ import (
 )
 
 // raw query
-func Upsert(ctx context.Context, db *sql.DB, table string, model interface{}) (int64, error) {
-	queryString, value, err := BuildUpsert(db, table, model)
+func Save(ctx context.Context, db *sql.DB, table string, model interface{}) (int64, error) {
+	queryString, value, err := BuildSave(db, table, model)
 	if err != nil {
 		return 0, err
 	}
@@ -23,8 +23,8 @@ func Upsert(ctx context.Context, db *sql.DB, table string, model interface{}) (i
 
 }
 
-func UpsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}) (int64, error) {
-	query, values, err0 := BuildUpsert(db, table, model)
+func SaveTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}) (int64, error) {
+	query, values, err0 := BuildSave(db, table, model)
 	if err0 != nil {
 		return -1, err0
 	}
@@ -35,7 +35,7 @@ func UpsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model i
 	return r.RowsAffected()
 }
 
-func BuildUpsert(db *sql.DB, table string, model interface{}) (string, []interface{}, error) {
+func BuildSave(db *sql.DB, table string, model interface{}) (string, []interface{}, error) {
 	placeholders := make([]string, 0)
 	exclude := make([]string, 0)
 	modelType := reflect.Indirect(reflect.ValueOf(model)).Type()

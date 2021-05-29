@@ -439,18 +439,16 @@ func BuildUpdateSql(table string, model interface{}, i int, buildParam func(int)
 	colNumber := 1
 	for _, colName := range columns {
 		if v1, ok := mapData[colName]; ok {
-			if v1 != nil {
-				v3, ok3 := GetDBValue(v1)
-				if ok3 {
-					colSet = append(colSet, QuoteColumnName(colName)+"="+v3)
-				} else {
-					values = append(values, v1)
-					colSet = append(colSet, QuoteColumnName(colName)+"="+buildParam(colNumber+i))
-					colNumber++
-				}
+			v3, ok3 := GetDBValue(v1)
+			if ok3 {
+				colSet = append(colSet, QuoteColumnName(colName)+"="+v3)
 			} else {
-				colSet = append(colSet, BuildParamWithNull(colName))
+				values = append(values, v1)
+				colSet = append(colSet, QuoteColumnName(colName)+"="+buildParam(colNumber+i))
+				colNumber++
 			}
+		} else {
+			colSet = append(colSet, BuildParamWithNull(colName))
 		}
 	}
 	for _, colName := range keys {
@@ -478,27 +476,12 @@ func GetDBValue(v interface{}) (string, bool) {
 			return "''", true
 		}
 		return "", false
-	case *string:
-		s1 := v.(*string)
-		if len(*s1) == 0 {
-			return "''", true
-		}
-		return "", false
 	case int:
 		return strconv.Itoa(v.(int)), true
 	case int64:
 		return strconv.FormatInt(v.(int64), 10), true
 	case int32:
 		return strconv.FormatInt(int64(v.(int32)), 10), true
-	case *int:
-		i1 := v.(*int)
-		return strconv.Itoa(*i1), true
-	case *int64:
-		i2 := v.(*int64)
-		return strconv.FormatInt(*i2, 10), true
-	case *int32:
-		i3 := v.(*int32)
-		return strconv.FormatInt(int64(*i3), 10), true
 	default:
 		return "", false
 	}
@@ -528,18 +511,16 @@ func BuildUpdateSqlWithVersion(table string, model interface{}, i int, versionIn
 	colNumber := 1
 	for _, colName := range columns {
 		if v1, ok := mapData[colName]; ok {
-			if v1 != nil {
-				v3, ok3 := GetDBValue(v1)
-				if ok3 {
-					colSet = append(colSet, fmt.Sprintf("%v = "+v3, colName))
-				} else {
-					values = append(values, v1)
-					colQuery = append(colQuery, QuoteColumnName(colName) + "=" + buildParam(colNumber+i))
-					colNumber++
-				}
+			v3, ok3 := GetDBValue(v1)
+			if ok3 {
+				colSet = append(colSet, fmt.Sprintf("%v = "+v3, colName))
 			} else {
-				colSet = append(colSet, BuildParamWithNull(colName))
+				values = append(values, v1)
+				colQuery = append(colQuery, QuoteColumnName(colName) + "=" + buildParam(colNumber+i))
+				colNumber++
 			}
+		} else {
+			colSet = append(colSet, BuildParamWithNull(colName))
 		}
 	}
 	for _, colName := range keys {
@@ -565,8 +546,8 @@ func BuildPatch(table string, model map[string]interface{}, mapJsonColum map[str
 	// Append variables set column
 	for key, _ := range model {
 		if _, ok := Find(idTagJsonNames, key); !ok {
-			if columName, ok2 := mapJsonColum[key]; ok2 {
-				scope.Columns = append(scope.Columns, columName)
+			if colName, ok2 := mapJsonColum[key]; ok2 {
+				scope.Columns = append(scope.Columns, colName)
 				scope.Values = append(scope.Values, model[key])
 			}
 		}

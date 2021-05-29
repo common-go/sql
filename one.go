@@ -36,39 +36,33 @@ func BuildInsertSql(table string, model interface{}, i int, buildParam func(int)
 	var params []string
 	for _, columnName := range keys {
 		if value, ok := mapKey[columnName]; ok {
-			if value != nil {
-				cols = append(cols, QuoteColumnName(columnName))
-				v2b, ok2 := GetDBValue(value)
-				if ok2 {
-					params = append(params, v2b)
-				} else {
-					values = append(values, value)
-					p := buildParam(i)
-					params = append(params, p)
-					i++
-				}
+			cols = append(cols, QuoteColumnName(columnName))
+			v2b, ok2 := GetDBValue(value)
+			if ok2 {
+				params = append(params, v2b)
+			} else {
+				values = append(values, value)
+				p := buildParam(i)
+				params = append(params, p)
+				i++
 			}
 		}
 	}
 	for _, columnName := range columns {
 		if v1, ok := mapData[columnName]; ok {
-			if v1 != nil {
-				cols = append(cols, QuoteColumnName(columnName))
-				v1b, ok1 := GetDBValue(v1)
-				if ok1 {
-					params = append(params, v1b)
-				} else {
-					values = append(values, v1)
-					p := buildParam(i)
-					params = append(params, p)
-					i++
-				}
+			cols = append(cols, QuoteColumnName(columnName))
+			v1b, ok1 := GetDBValue(v1)
+			if ok1 {
+				params = append(params, v1b)
+			} else {
+				values = append(values, v1)
+				p := buildParam(i)
+				params = append(params, p)
+				i++
 			}
 		}
 	}
 	column := strings.Join(cols, ",")
-	// numCol := len(cols)
-	// value := fmt.Sprintf("(%v)", BuildParametersFrom(i, numCol, buildParam))
 	return fmt.Sprintf("insert into %v(%v)values(%v)", table, column, strings.Join(params, ",")), values
 }
 
@@ -87,7 +81,7 @@ func BuildInsertSqlWithVersion(table string, model interface{}, i int, versionIn
 	var values []interface{}
 	var params []string
 	for _, columnName := range keys {
-		if value, ok := mapKey[columnName]; ok && value != nil {
+		if value, ok := mapKey[columnName]; ok {
 			cols = append(cols, QuoteColumnName(columnName))
 			v2b, ok2 := GetDBValue(value)
 			if ok2 {
@@ -101,7 +95,7 @@ func BuildInsertSqlWithVersion(table string, model interface{}, i int, versionIn
 		}
 	}
 	for _, columnName := range columns {
-		if v1, ok := mapData[columnName]; ok && v1 != nil {
+		if v1, ok := mapData[columnName]; ok {
 			cols = append(cols, QuoteColumnName(columnName))
 			v1b, ok1 := GetDBValue(v1)
 			if ok1 {
@@ -130,54 +124,59 @@ func QuoteColumnName(str string) string {
 }
 
 func BuildMapDataAndKeys(model interface{}, update bool) (map[string]interface{}, map[string]interface{}, []string, []string) {
-	var mapValue = make(map[string]interface{})
-	var mapPrimaryKeyValue = make(map[string]interface{})
-	keysOfMapValue := make([]string, 0)
+	var mapData = make(map[string]interface{})
+	var mapKey = make(map[string]interface{})
 	keys := make([]string, 0)
-	modelValue := reflect.Indirect(reflect.ValueOf(model))
-	modelType := modelValue.Type()
+	columns := make([]string, 0)
+	mv := reflect.Indirect(reflect.ValueOf(model))
+	modelType := mv.Type()
 	numField := modelType.NumField()
 	for index := 0; index < numField; index++ {
 		if colName, isKey, exist := CheckByIndex(modelType, index, update); exist {
-			f := modelValue.Field(index)
+			f := mv.Field(index)
 			fieldValue := f.Interface()
-			/*
-				if f.Kind() == reflect.Ptr {
-					if !reflect.ValueOf(fieldValue).IsNil() {
-
-					}
-				}
-			*/
-			if !isKey {
-				if boolValue, ok := fieldValue.(bool); ok {
-					valueS := modelType.Field(index).Tag.Get(strconv.FormatBool(boolValue))
-					valueInt, err := strconv.Atoi(valueS)
-					if err != nil{
-						mapValue[colName] = valueS
-					} else {
-						mapValue[colName] = valueInt
-					}
+			skip := false
+			if f.Kind() == reflect.Ptr {
+				if reflect.ValueOf(fieldValue).IsNil() {
+					skip = true
 				} else {
-					if boolPointer, okPointer := fieldValue.(*bool); okPointer {
-						valueS := modelType.Field(index).Tag.Get(strconv.FormatBool(*boolPointer))
-						valueInt, err := strconv.Atoi(valueS)
-						if err != nil{
-							mapValue[colName] = valueS
-						} else {
-							mapValue[colName] = valueInt
-						}
-					} else {
-						mapValue[colName] = fieldValue
-					}
+					fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
 				}
-				keysOfMapValue = append(keysOfMapValue, colName)
+			}
+			if isKey {
+				columns = append(columns, colName)
+				if !skip {
+					mapKey[colName] = fieldValue
+				}
 			} else {
 				keys = append(keys, colName)
-				mapPrimaryKeyValue[colName] = fieldValue
+				if !skip {
+					if boolValue, ok := fieldValue.(bool); ok {
+						valueS := modelType.Field(index).Tag.Get(strconv.FormatBool(boolValue))
+						valueInt, err := strconv.Atoi(valueS)
+						if err != nil{
+							mapData[colName] = valueS
+						} else {
+							mapData[colName] = valueInt
+						}
+					} else {
+						if boolPointer, okPointer := fieldValue.(*bool); okPointer {
+							valueS := modelType.Field(index).Tag.Get(strconv.FormatBool(*boolPointer))
+							valueInt, err := strconv.Atoi(valueS)
+							if err != nil{
+								mapData[colName] = valueS
+							} else {
+								mapData[colName] = valueInt
+							}
+						} else {
+							mapData[colName] = fieldValue
+						}
+					}
+				}
 			}
 		}
 	}
-	return mapValue, mapPrimaryKeyValue, keysOfMapValue, keys
+	return mapData, mapKey, keys, columns
 }
 func CheckByIndex(modelType reflect.Type, index int, update bool) (col string, isKey bool, colExist bool) {
 	fields := modelType.Field(index)

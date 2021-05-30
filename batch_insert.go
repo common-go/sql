@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"reflect"
@@ -165,4 +166,16 @@ func BuildInsertBatch(db *sql.DB, table string, models interface{}, i int, optio
 		query := fmt.Sprintf("insert all %s select * from dual", strings.Join(placeholders, " "))
 		return query, args, nil
 	}
+}
+
+func InsertMany(ctx context.Context, db *sql.DB, tableName string, models interface{}, options ...func(int) string) (int64, error) {
+	query, args, er1 := BuildInsertBatch(db, tableName, models, 0, options...)
+	if er1 != nil {
+		return 0, er1
+	}
+	x, er2 := db.ExecContext(ctx, query, args...)
+	if er2 != nil {
+		return 0, er2
+	}
+	return x.RowsAffected()
 }

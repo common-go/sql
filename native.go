@@ -11,7 +11,7 @@ import (
 
 // raw query
 func Save(ctx context.Context, db *sql.DB, table string, model interface{}) (int64, error) {
-	queryString, value, err := BuildSave(db, table, model)
+	queryString, value, err := BuildSave(db, table, model, 0)
 	if err != nil {
 		return 0, err
 	}
@@ -24,7 +24,7 @@ func Save(ctx context.Context, db *sql.DB, table string, model interface{}) (int
 }
 
 func SaveTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}) (int64, error) {
-	query, values, err0 := BuildSave(db, table, model)
+	query, values, err0 := BuildSave(db, table, model, 0)
 	if err0 != nil {
 		return -1, err0
 	}
@@ -35,7 +35,7 @@ func SaveTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model int
 	return r.RowsAffected()
 }
 
-func BuildSave(db *sql.DB, table string, model interface{}) (string, []interface{}, error) {
+func BuildSave(db *sql.DB, table string, model interface{}, i int) (string, []interface{}, error) {
 	placeholders := make([]string, 0)
 	exclude := make([]string, 0)
 	modelType := reflect.Indirect(reflect.ValueOf(model)).Type()
@@ -98,7 +98,7 @@ func BuildSave(db *sql.DB, table string, model interface{}) (string, []interface
 	case "postgres":
 		uniqueCols := make([]string, 0)
 		value := make([]interface{}, 0, len(attrs)*2)
-		i := 0
+		// i := 0
 		for ; i < len(sorted); i++ {
 			setColumns = append(setColumns, `"`+strings.Replace(sorted[i], `"`, `""`, -1)+`"`+" = excluded."+strings.Replace(sorted[i], `"`, `""`, -1))
 			dbColumns = append(dbColumns, "`"+strings.Replace(sorted[i], "`", "``", -1)+"`")
@@ -112,7 +112,7 @@ func BuildSave(db *sql.DB, table string, model interface{}) (string, []interface
 			variables = append(variables, "$"+strconv.Itoa(i+1))
 			value = append(value, val)
 		}
-		queryString := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT (%s) DO UPDATE SET %s",
+		queryString := fmt.Sprintf("insert into %s(%s) values %s ON CONFLICT (%s) DO UPDATE SET %s",
 			`"`+strings.Replace(table, `"`, `""`, -1)+`"`,
 			strings.Join(dbColumns, ", "),
 			strings.Join(variables, ", "),

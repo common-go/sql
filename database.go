@@ -395,9 +395,9 @@ func Delete(ctx context.Context, db *sql.DB, table string, query map[string]inte
 	} else {
 		buildParam = GetBuild(db)
 	}
-	queryDelete, values := BuildDelete(table, query, buildParam)
+	sql, values := BuildDeleteSql(table, query, buildParam)
 
-	result, err := db.ExecContext(ctx, queryDelete, values...)
+	result, err := db.ExecContext(ctx, sql, values...)
 
 	if err != nil {
 		return -1, err
@@ -630,7 +630,7 @@ func BuildPatchWithVersion(table string, model map[string]interface{}, mapJsonCo
 	return query, value
 }
 
-func BuildDelete(table string, ids map[string]interface{}, buildParam func(int) string) (string, []interface{}) {
+func BuildDeleteSql(table string, ids map[string]interface{}, buildParam func(int) string) (string, []interface{}) {
 	var values []interface{}
 	var queryArr []string
 	i := 1

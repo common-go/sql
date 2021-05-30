@@ -131,9 +131,9 @@ func BuildMapDataAndKeys(model interface{}, update bool) (map[string]interface{}
 	mv := reflect.Indirect(reflect.ValueOf(model))
 	modelType := mv.Type()
 	numField := modelType.NumField()
-	for index := 0; index < numField; index++ {
-		if colName, isKey, exist := CheckByIndex(modelType, index, update); exist {
-			f := mv.Field(index)
+	for i := 0; i < numField; i++ {
+		if colName, isKey, exist := CheckByIndex(modelType, i, update); exist {
+			f := mv.Field(i)
 			fieldValue := f.Interface()
 			isNil := false
 			if f.Kind() == reflect.Ptr {
@@ -152,7 +152,7 @@ func BuildMapDataAndKeys(model interface{}, update bool) (map[string]interface{}
 				keys = append(keys, colName)
 				if !isNil {
 					if boolValue, ok := fieldValue.(bool); ok {
-						valueS := modelType.Field(index).Tag.Get(strconv.FormatBool(boolValue))
+						valueS := modelType.Field(i).Tag.Get(strconv.FormatBool(boolValue))
 						mapData[colName] = valueS
 					} else {
 						mapData[colName] = fieldValue
@@ -164,17 +164,16 @@ func BuildMapDataAndKeys(model interface{}, update bool) (map[string]interface{}
 	return mapData, mapKey, keys, columns
 }
 func CheckByIndex(modelType reflect.Type, index int, update bool) (col string, isKey bool, colExist bool) {
-	fields := modelType.Field(index)
-	tag, _ := fields.Tag.Lookup("gorm")
+	field := modelType.Field(index)
+	tag, _ := field.Tag.Lookup("gorm")
 	if strings.Contains(tag, IgnoreReadWrite) {
 		return "", false, false
 	}
 	if update {
-		if strings.Contains(tag, "updateable:false") {
+		if strings.Contains(tag, "update:false") {
 			return "", false, false
 		}
 	}
-
 	if has := strings.Contains(tag, "column"); has {
 		str1 := strings.Split(tag, ";")
 		num := len(str1)

@@ -6,30 +6,30 @@ import (
 	"reflect"
 )
 
-type BatchInserter struct {
+type SizeBatchInserter struct {
 	db         *sql.DB
 	tableName  string
 	BuildParam func(i int) string
 	Map        func(ctx context.Context, model interface{}) (interface{}, error)
 }
-func NewBatchInserter(db *sql.DB, tableName string, options...func(context.Context, interface{}) (interface{}, error)) *BatchInserter {
+func NewSizeBatchInserter(db *sql.DB, tableName string, options...func(context.Context, interface{}) (interface{}, error)) *SizeBatchInserter {
 	var mp func(context.Context, interface{}) (interface{}, error)
 	if len(options) > 0 && options[0] != nil {
 		mp = options[0]
 	}
-	return NewSqlBatchInserter(db, tableName, mp)
+	return NewSizeSqlBatchInserter(db, tableName, mp)
 }
-func NewSqlBatchInserter(db *sql.DB, tableName string, mp func(context.Context, interface{}) (interface{}, error), options...func(i int) string) *BatchInserter {
+func NewSizeSqlBatchInserter(db *sql.DB, tableName string, mp func(context.Context, interface{}) (interface{}, error), options...func(i int) string) *SizeBatchInserter {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
 	} else {
 		buildParam = GetBuild(db)
 	}
-	return &BatchInserter{db: db, tableName: tableName, BuildParam: buildParam, Map: mp}
+	return &SizeBatchInserter{db: db, tableName: tableName, BuildParam: buildParam, Map: mp}
 }
 
-func (w *BatchInserter) Write(ctx context.Context, models interface{}) ([]int, []int, error) {
+func (w *SizeBatchInserter) Write(ctx context.Context, models interface{}) ([]int, []int, error) {
 	successIndices := make([]int, 0)
 	failIndices := make([]int, 0)
 	var models2 interface{}

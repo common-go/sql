@@ -22,8 +22,8 @@ func makeSchema(modelType reflect.Type) ([]string, map[string]fieldDB) {
 	numField := modelType.NumField()
 	columns := make([]string, 0)
 	schema := make(map[string]fieldDB, 0)
-	for i := 0; i < numField; i++ {
-		field := modelType.Field(i)
+	for idx := 0; idx < numField; idx++ {
+		field := modelType.Field(idx)
 		tag, _ := field.Tag.Lookup("gorm")
 		if !strings.Contains(tag, IgnoreReadWrite) {
 			update := !strings.Contains(tag, "update:false")
@@ -48,7 +48,7 @@ func makeSchema(modelType reflect.Type) ([]string, map[string]fieldDB) {
 							f := fieldDB{
 								json: json,
 								column: col,
-								index: i,
+								index: idx,
 								key: isKey,
 								update: update,
 							}
@@ -89,42 +89,80 @@ func BuildInsertBatch(db *sql.DB, table string, models interface{}, i int, optio
 	first := s.Index(i).Interface()
 	modelType := reflect.TypeOf(first)
 	cols, schema := makeSchema(modelType)
-	for j := 0; j < s.Len(); j++ {
-		model := s.Index(j).Interface()
-		mv := reflect.ValueOf(model)
-		values := make([]string, 0)
-		for _, col := range cols {
-			fdb := schema[col]
-			f := mv.Field(fdb.index)
-			fieldValue := f.Interface()
-			isNil := false
-			if f.Kind() == reflect.Ptr {
-				if reflect.ValueOf(fieldValue).IsNil() {
-					isNil = true
+	driver := GetDriver(db)
+	if driver != DriverOracle {
+		for j := 0; j < s.Len(); j++ {
+			model := s.Index(j).Interface()
+			mv := reflect.ValueOf(model)
+			values := make([]string, 0)
+			for _, col := range cols {
+				fdb := schema[col]
+				f := mv.Field(fdb.index)
+				fieldValue := f.Interface()
+				isNil := false
+				if f.Kind() == reflect.Ptr {
+					if reflect.ValueOf(fieldValue).IsNil() {
+						isNil = true
+					} else {
+						fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
+					}
+				}
+				if isNil {
+					values = append(values, "null")
 				} else {
-					fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
+					v, ok := GetDBValue(fieldValue)
+					if ok {
+						values = append(values, v)
+					} else {
+						values = append(values, buildParam(i+1))
+						i = i + 1
+						args = append(args, fieldValue)
+					}
 				}
 			}
-			if isNil {
-				values = append(values, "null")
-			} else {
-				v, ok := GetDBValue(fieldValue)
-				if ok {
-					values = append(values, v)
-				} else {
-					values = append(values, buildParam(i+1))
-					i = i + 1
-					args = append(args, fieldValue)
-				}
-			}
+			x := "(" + strings.Join(values, ",") + ")"
+			placeholders = append(placeholders, x)
 		}
-		x := "(" + strings.Join(values, ",") + ")"
-		placeholders = append(placeholders, x)
+		query := fmt.Sprintf(fmt.Sprintf("insert into %s (%s) values %s",
+			table,
+			strings.Join(cols, ","),
+			strings.Join(placeholders, ","),
+		))
+		return query, args, nil
+	} else {
+		for j := 0; j < s.Len(); j++ {
+			model := s.Index(j).Interface()
+			mv := reflect.ValueOf(model)
+			iCols := make([]string, 0)
+			values := make([]string, 0)
+			for _, col := range cols {
+				fdb := schema[col]
+				f := mv.Field(fdb.index)
+				fieldValue := f.Interface()
+				isNil := false
+				if f.Kind() == reflect.Ptr {
+					if reflect.ValueOf(fieldValue).IsNil() {
+						isNil = true
+					} else {
+						fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
+					}
+				}
+				if !isNil {
+					iCols = append(iCols, col)
+					v, ok := GetDBValue(fieldValue)
+					if ok {
+						values = append(values, v)
+					} else {
+						values = append(values, buildParam(i+1))
+						i = i + 1
+						args = append(args, fieldValue)
+					}
+				}
+			}
+			x := fmt.Sprintf("into %s(%s)values(%s)", table, strings.Join(iCols, ","), strings.Join(values, ","))
+			placeholders = append(placeholders, x)
+		}
+		query := fmt.Sprintf("insert all %s select * from dual", strings.Join(placeholders, " "))
+		return query, args, nil
 	}
-	query := fmt.Sprintf(fmt.Sprintf("insert into %s (%s) values %s",
-		table,
-		strings.Join(cols, ","),
-		strings.Join(placeholders, ","),
-	))
-	return query, args, nil
 }

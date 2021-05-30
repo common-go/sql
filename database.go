@@ -662,26 +662,29 @@ func ExtractMapValue(value interface{}, excludeColumns *[]string, ignoreNull boo
 		if GetTag(field, IgnoreReadWrite) == IgnoreReadWrite {
 			continue
 		}
-		if value := field.Value.Interface(); value == nil && ignoreNull {
-			*excludeColumns = append(*excludeColumns, field.Tags["fieldName"])
+		kind := field.Value.Kind()
+		fieldValue := field.Value.Interface()
+		if kind == reflect.Ptr {
+			if reflect.ValueOf(fieldValue).IsNil() {
+				if ignoreNull {
+					*excludeColumns = append(*excludeColumns, field.Tags["fieldName"])
+				}
+			} else {
+				fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
+			}
 		}
 		if !ContainString(*excludeColumns, GetTag(field, "fieldName")) && !IsPrimary(field) {
 			if dBName, ok := field.Tags[DBName]; ok {
-				fieldValue := field.Value.Interface()
 				if boolValue, ok := fieldValue.(bool); ok {
 					attrs[dBName] = field.Type.Field(index).Tag.Get(strconv.FormatBool(boolValue))
 				} else {
-					if boolPointer, okPointer := fieldValue.(*bool); okPointer {
-						attrs[dBName] = field.Type.Field(index).Tag.Get(strconv.FormatBool(*boolPointer))
-					} else {
-						attrs[dBName] = fieldValue
-					}
+					attrs[dBName] = fieldValue
 				}
 			}
 		}
 		if IsPrimary(field) {
 			if dBName, ok := field.Tags[DBName]; ok {
-				attrsKey[dBName] = field.Value.Interface()
+				attrsKey[dBName] = fieldValue
 			}
 		}
 	}

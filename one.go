@@ -135,42 +135,27 @@ func BuildMapDataAndKeys(model interface{}, update bool) (map[string]interface{}
 		if colName, isKey, exist := CheckByIndex(modelType, index, update); exist {
 			f := mv.Field(index)
 			fieldValue := f.Interface()
-			skip := false
+			isNil := false
 			if f.Kind() == reflect.Ptr {
 				if reflect.ValueOf(fieldValue).IsNil() {
-					skip = true
+					isNil = true
 				} else {
 					fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
 				}
 			}
 			if isKey {
 				columns = append(columns, colName)
-				if !skip {
+				if !isNil {
 					mapKey[colName] = fieldValue
 				}
 			} else {
 				keys = append(keys, colName)
-				if !skip {
+				if !isNil {
 					if boolValue, ok := fieldValue.(bool); ok {
 						valueS := modelType.Field(index).Tag.Get(strconv.FormatBool(boolValue))
-						valueInt, err := strconv.Atoi(valueS)
-						if err != nil{
-							mapData[colName] = valueS
-						} else {
-							mapData[colName] = valueInt
-						}
+						mapData[colName] = valueS
 					} else {
-						if boolPointer, okPointer := fieldValue.(*bool); okPointer {
-							valueS := modelType.Field(index).Tag.Get(strconv.FormatBool(*boolPointer))
-							valueInt, err := strconv.Atoi(valueS)
-							if err != nil{
-								mapData[colName] = valueS
-							} else {
-								mapData[colName] = valueInt
-							}
-						} else {
-							mapData[colName] = fieldValue
-						}
+						mapData[colName] = fieldValue
 					}
 				}
 			}

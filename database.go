@@ -120,18 +120,18 @@ func BuildFindById(db *sql.DB, table string, id interface{}, mapJsonColumnKeys m
 		where = fmt.Sprintf("where %s = %s", mapJsonColumnKeys[keys[0]], buildParam(1))
 		values = append(values, id)
 	} else {
-		conditions := make([]string, 0)
+		queres := make([]string, 0)
 		if ids, ok := id.(map[string]interface{}); ok {
 			j := 0
 			for _, keyJson := range keys {
 				columnName := mapJsonColumnKeys[keyJson]
 				if idk, ok1 := ids[keyJson]; ok1 {
-					conditions = append(conditions, fmt.Sprintf("%s = %s", columnName, buildParam(j)))
+					queres = append(queres, fmt.Sprintf("%s = %s", columnName, buildParam(j)))
 					values = append(values, idk)
 					j++
 				}
 			}
-			where = "where " + strings.Join(conditions, " and ")
+			where = "where " + strings.Join(queres, " and ")
 		}
 	}
 	return fmt.Sprintf("select * from %v %v", table, where), values
@@ -150,17 +150,17 @@ func InitArrayResults(modelsType reflect.Type) interface{} {
 }
 
 func setValue(model interface{}, index int, value interface{}) (interface{}, error) {
-	vo := reflect.Indirect(reflect.ValueOf(model))
+	valueObject := reflect.Indirect(reflect.ValueOf(model))
 	switch reflect.ValueOf(model).Kind() {
 	case reflect.Ptr:
 		{
-			vo.Field(index).Set(reflect.ValueOf(value))
+			valueObject.Field(index).Set(reflect.ValueOf(value))
 			return model, nil
 		}
 	default:
-		if mo, ok := model.(reflect.Value); ok {
-			_, err := setValueWithTypeValue(mo, index, value)
-			return mo.Interface(), err
+		if modelWithTypeValue, ok := model.(reflect.Value); ok {
+			_, err := setValueWithTypeValue(modelWithTypeValue, index, value)
+			return modelWithTypeValue.Interface(), err
 		}
 	}
 	return model, nil
@@ -646,7 +646,7 @@ func BuildDelete(table string, ids map[string]interface{}, buildParam func(int) 
 // Obtain columns and values required for insert from interface
 func ExtractMapValue(value interface{}, excludeColumns *[]string, ignoreNull bool) (map[string]interface{}, map[string]interface{}, error) {
 	rv := reflect.ValueOf(value)
-	modelType := reflect.TypeOf(value)
+	// modelType := reflect.TypeOf(value)
 	if rv.Kind() == reflect.Ptr {
 		rv = rv.Elem()
 		value = rv.Interface()
@@ -658,39 +658,30 @@ func ExtractMapValue(value interface{}, excludeColumns *[]string, ignoreNull boo
 	var attrs = map[string]interface{}{}
 	var attrsKey = map[string]interface{}{}
 
-	for i, field := range GetMapField(value) {
+	for index, field := range GetMapField(value) {
 		if GetTag(field, IgnoreReadWrite) == IgnoreReadWrite {
 			continue
 		}
-		kind := field.Value.Kind()
-		fieldValue := field.Value.Interface()
-		// isNil := false
-		if kind == reflect.Ptr {
-			if reflect.ValueOf(fieldValue).IsNil() {
-				// isNil = true
-				if ignoreNull {
-					*excludeColumns = append(*excludeColumns, field.Tags["fieldName"])
-				}
-				fieldValue = nil
-			} else {
-				fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
-			}
+		if value := field.Value.Interface(); value == nil && ignoreNull {
+			*excludeColumns = append(*excludeColumns, field.Tags["fieldName"])
 		}
-		if !ContainString(*excludeColumns, GetTag(field, "fieldName")) && !IsPrimaryKey(field) {
+		if !ContainString(*excludeColumns, GetTag(field, "fieldName")) && !IsPrimary(field) {
 			if dBName, ok := field.Tags[DBName]; ok {
+				fieldValue := field.Value.Interface()
 				if boolValue, ok := fieldValue.(bool); ok {
-					f := modelType.Field(i)
-					s := strconv.FormatBool(boolValue)
-					v := f.Tag.Get(s)
-					attrs[dBName] = v
+					attrs[dBName] = field.Type.Field(index).Tag.Get(strconv.FormatBool(boolValue))
 				} else {
-					attrs[dBName] = fieldValue
+					if boolPointer, okPointer := fieldValue.(*bool); okPointer {
+						attrs[dBName] = field.Type.Field(index).Tag.Get(strconv.FormatBool(*boolPointer))
+					} else {
+						attrs[dBName] = fieldValue
+					}
 				}
 			}
 		}
-		if IsPrimaryKey(field) {
+		if IsPrimary(field) {
 			if dBName, ok := field.Tags[DBName]; ok {
-				attrsKey[dBName] = fieldValue
+				attrsKey[dBName] = field.Value.Interface()
 			}
 		}
 	}
@@ -992,7 +983,7 @@ func GetTag(field Field, tagName string) string {
 	return ""
 }
 
-func IsPrimaryKey(field Field) bool {
+func IsPrimary(field Field) bool {
 	return GetTag(field, PrimaryKey) != ""
 }
 func ReplaceQueryArgs(driver string, query string) string {

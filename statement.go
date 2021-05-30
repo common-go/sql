@@ -76,17 +76,18 @@ func findTag(tag string, key string) (string, bool) {
 type Field struct {
 	Tags  map[string]string
 	Value reflect.Value
+	Type  reflect.Type
 }
 
 func GetMapField(object interface{}) []Field {
 	modelType := reflect.TypeOf(object)
 	value := reflect.Indirect(reflect.ValueOf(object))
-	result := []Field{}
+	var result []Field
 	numField := modelType.NumField()
 
 	for i := 0; i < numField; i++ {
 		field := modelType.Field(i)
-		selectField := Field{Value: value.Field(i)}
+		selectField := Field{Value: value.Field(i), Type: modelType}
 		gormTag, ok := field.Tag.Lookup("gorm")
 		tag := make(map[string]string)
 		tag["fieldName"] = field.Name

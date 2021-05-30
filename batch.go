@@ -83,7 +83,7 @@ func ExecuteBatch(ctx context.Context, db *sql.DB, sts []Statement, firstRowSucc
 	return 1, nil
 }
 
-func InsertMany(ctx context.Context, db *sql.DB, tableName string, objects []interface{}, chunkSize int, buildParam func(i int) string, excludeColumns ...string) (int64, error) {
+func InsertManyWithSize(ctx context.Context, db *sql.DB, tableName string, objects []interface{}, chunkSize int, buildParam func(i int) string, excludeColumns ...string) (int64, error) {
 	// Split records with specified size not to exceed Database parameter limit
 	if chunkSize <= 0 {
 		chunkSize = len(objects)
@@ -334,13 +334,22 @@ func InsertManyRaw(ctx context.Context, db *sql.DB, tableName string, objects []
 		} else {
 			return 0, fmt.Errorf("only support skip duplicate on mysql and postgresql, current vendor is %s", driver)
 		}
-	}
-	{
-		query = fmt.Sprintf(fmt.Sprintf("insert into %s (%s) values %s",
-			tableName,
-			strings.Join(dbColumns, ", "),
-			strings.Join(placeholders, ", "),
-		))
+	} else {
+		if driver != DriverOracle {
+			query = fmt.Sprintf(fmt.Sprintf("insert into %s (%s) values %s",
+				tableName,
+				strings.Join(dbColumns, ","),
+				strings.Join(placeholders, ","),
+			))
+		} else {
+			all := make([]string, 0)
+			colNames := "(" + strings.Join(dbColumns, ",") + ")"
+			for _, s0 := range placeholders {
+				s1 := fmt.Sprintf(" into %s %s values %s ", tableName, colNames, s0)
+				all = append(all, s1)
+			}
+			query = fmt.Sprintf(" insert all %s select * from dual", strings.Join(all, " "))
+		}
 	}
 	mainScope.Query = query
 

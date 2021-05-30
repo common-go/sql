@@ -52,7 +52,7 @@ func (w *BatchInserter) Write(ctx context.Context, models interface{}) ([]int, [
 		failIndices = ToArrayIndex(s, failIndices)
 		return successIndices, failIndices, er1
 	}
-	_, er2 := InsertMany(ctx, w.db, w.tableName, _models, 0, w.BuildParam)
+	_, er2 := InsertManyWithSize(ctx, w.db, w.tableName, _models, 0, w.BuildParam)
 
 	if er2 == nil {
 		// Return full success

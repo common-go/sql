@@ -123,7 +123,7 @@ func InsertInTransactionTx(ctx context.Context, db *sql.DB, tx *sql.Tx, tableNam
 		}
 		driver := GetDriver(db)
 		firstObj := objectValues.Index(0).Interface()
-		columns, primaryKeys, err := ExtractMapValue(firstObj, &excludeColumns, true)
+		columns, primaryKeys, _, err := ExtractMapValue(firstObj, &excludeColumns, true)
 		if err != nil {
 			return 0, err
 		}
@@ -144,7 +144,7 @@ func InsertInTransactionTx(ctx context.Context, db *sql.DB, tx *sql.Tx, tableNam
 			obj := objectValues.Index(i).Interface()
 			// Store placeholders for embedding variables
 			placeholders := make([]string, 0, attrSize)
-			objAttrs, primaryKeys, err := ExtractMapValue(obj, &excludeColumns, true)
+			objAttrs, primaryKeys, _, err := ExtractMapValue(obj, &excludeColumns, true)
 			if err != nil {
 				return 0, err
 			}
@@ -252,7 +252,7 @@ func InsertManyRaw(ctx context.Context, db *sql.DB, tableName string, objects []
 		return 0, nil
 	}
 	driver := GetDriver(db)
-	firstAttrs, primaryKeys, err := ExtractMapValue(objects[0], &excludeColumns, true)
+	firstAttrs, primaryKeys, _, err := ExtractMapValue(objects[0], &excludeColumns, true)
 	if err != nil {
 		return 0, err
 	}
@@ -276,7 +276,7 @@ func InsertManyRaw(ctx context.Context, db *sql.DB, tableName string, objects []
 	}
 	var start int
 	for _, obj := range objects {
-		objAttrs, keys, err := ExtractMapValue(obj, &excludeColumns, true)
+		objAttrs, keys, _, err := ExtractMapValue(obj, &excludeColumns, true)
 		if err != nil {
 			return 0, err
 		}
@@ -356,7 +356,7 @@ func InsertInTransaction(ctx context.Context, db *sql.DB, tableName string, obje
 		return 0, nil
 	}
 	driver := GetDriver(db)
-	firstAttrs, _, err := ExtractMapValue(objects[0], &excludeColumns, true)
+	firstAttrs, _, _, err := ExtractMapValue(objects[0], &excludeColumns, true)
 	if err != nil {
 		return 0, err
 	}
@@ -380,7 +380,7 @@ func InsertInTransaction(ctx context.Context, db *sql.DB, tableName string, obje
 		mainScope := BatchStatement{}
 		// Store placeholders for embedding variables
 		placeholders := make([]string, 0, attrSize)
-		objAttrs, _, err := ExtractMapValue(obj, &excludeColumns, true)
+		objAttrs, _, _, err := ExtractMapValue(obj, &excludeColumns, true)
 		if err != nil {
 			return 0, err
 		}

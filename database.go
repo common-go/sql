@@ -120,18 +120,18 @@ func BuildFindById(db *sql.DB, table string, id interface{}, mapJsonColumnKeys m
 		where = fmt.Sprintf("where %s = %s", mapJsonColumnKeys[keys[0]], buildParam(1))
 		values = append(values, id)
 	} else {
-		queres := make([]string, 0)
+		conditions := make([]string, 0)
 		if ids, ok := id.(map[string]interface{}); ok {
 			j := 0
 			for _, keyJson := range keys {
 				columnName := mapJsonColumnKeys[keyJson]
 				if idk, ok1 := ids[keyJson]; ok1 {
-					queres = append(queres, fmt.Sprintf("%s = %s", columnName, buildParam(j)))
+					conditions = append(conditions, fmt.Sprintf("%s = %s", columnName, buildParam(j)))
 					values = append(values, idk)
 					j++
 				}
 			}
-			where = "where " + strings.Join(queres, " and ")
+			where = "where " + strings.Join(conditions, " and ")
 		}
 	}
 	return fmt.Sprintf("select * from %v %v", table, where), values
@@ -644,7 +644,7 @@ func BuildDelete(table string, ids map[string]interface{}, buildParam func(int) 
 }
 
 // Obtain columns and values required for insert from interface
-func ExtractMapValue(value interface{}, excludeColumns *[]string, ignoreNull bool) (map[string]interface{}, map[string]interface{}, error) {
+func ExtractMapValue(value interface{}, excludeColumns *[]string, ignoreNull bool) (map[string]interface{}, map[string]interface{}, map[string]interface{}, error) {
 	rv := reflect.ValueOf(value)
 	// modelType := reflect.TypeOf(value)
 	if rv.Kind() == reflect.Ptr {
@@ -652,10 +652,11 @@ func ExtractMapValue(value interface{}, excludeColumns *[]string, ignoreNull boo
 		value = rv.Interface()
 	}
 	if rv.Kind() != reflect.Struct {
-		return nil, nil, errors.New("value must be kind of Struct")
+		return nil, nil, nil, errors.New("value must be kind of Struct")
 	}
 
 	var attrs = map[string]interface{}{}
+	var attrs2 = map[string]interface{}{}
 	var attrsKey = map[string]interface{}{}
 
 	for index, field := range GetMapField(value) {
@@ -664,31 +665,44 @@ func ExtractMapValue(value interface{}, excludeColumns *[]string, ignoreNull boo
 		}
 		kind := field.Value.Kind()
 		fieldValue := field.Value.Interface()
+		isNil := false
 		if kind == reflect.Ptr {
 			if reflect.ValueOf(fieldValue).IsNil() {
 				if ignoreNull {
 					*excludeColumns = append(*excludeColumns, field.Tags["fieldName"])
 				}
+				isNil = true
 			} else {
 				fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
 			}
 		}
 		if !ContainString(*excludeColumns, GetTag(field, "fieldName")) && !IsPrimary(field) {
 			if dBName, ok := field.Tags[DBName]; ok {
-				if boolValue, ok := fieldValue.(bool); ok {
-					attrs[dBName] = field.Type.Field(index).Tag.Get(strconv.FormatBool(boolValue))
+				if !isNil {
+					if boolValue, ok := fieldValue.(bool); ok {
+						bv := field.Type.Field(index).Tag.Get(strconv.FormatBool(boolValue))
+						attrs[dBName] = bv
+						attrs2[dBName] = bv
+					} else {
+						attrs[dBName] = fieldValue
+						attrs2[dBName] = fieldValue
+					}
 				} else {
 					attrs[dBName] = fieldValue
 				}
+
 			}
 		}
 		if IsPrimary(field) {
 			if dBName, ok := field.Tags[DBName]; ok {
 				attrsKey[dBName] = fieldValue
+				if !isNil {
+					attrs2[dBName] = fieldValue
+				}
 			}
 		}
 	}
-	return attrs, attrsKey, nil
+	return attrs, attrsKey, attrs2, nil
 }
 
 func GetIndexByTag(tag, key string, modelType reflect.Type) (index int) {

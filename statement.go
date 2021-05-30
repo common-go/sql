@@ -17,7 +17,7 @@ type BatchStatement struct {
 }
 
 func newStatement(value interface{}, excludeColumns ...string) BatchStatement {
-	attribute, attributeKey, _ := ExtractMapValue(value, &excludeColumns, false)
+	attribute, attributeKey, _, _ := ExtractMapValue(value, &excludeColumns, false)
 	attrSize := len(attribute)
 	modelType := reflect.TypeOf(value)
 	keys := FindDBColumNames(modelType)

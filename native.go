@@ -35,7 +35,7 @@ func SaveTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model int
 	return r.RowsAffected()
 }
 
-func BuildSql(db *sql.DB, table string, model interface{}, options...int) (string, []interface{}, error) {
+func BuildSql(db *sql.DB, table string, model interface{}) (string, []interface{}, error) {
 	placeholders := make([]string, 0)
 	exclude := make([]string, 0)
 	modelType := reflect.Indirect(reflect.ValueOf(model)).Type()
@@ -51,7 +51,7 @@ func BuildSql(db *sql.DB, table string, model interface{}, options...int) (strin
 		}
 	}
 
-	attrs, unique, err := ExtractMapValue(model, &exclude, false)
+	attrs, unique, nattrs, err := ExtractMapValue(model, &exclude, false)
 	if err != nil {
 		return "0", nil, fmt.Errorf("cannot extract object's values: %w", err)
 	}
@@ -67,22 +67,26 @@ func BuildSql(db *sql.DB, table string, model interface{}, options...int) (strin
 	var setColumns []string
 	dialect := GetDriver(db)
 	i := 0
+	/*
+	if len(options) > 0 && options[0] > 0 {
+		i = options[0]
+	}*/
 	switch dialect {
 	case DriverPostgres:
 		uniqueCols := make([]string, 0)
-		value := make([]interface{}, 0, len(attrs)*2)
+		values := make([]interface{}, 0, len(attrs)*2)
 		for ; i < len(sorted); i++ {
 			setColumns = append(setColumns, `"`+strings.Replace(sorted[i], `"`, `""`, -1)+`"`+" = excluded."+strings.Replace(sorted[i], `"`, `""`, -1))
 			dbColumns = append(dbColumns, "`"+strings.Replace(sorted[i], "`", "``", -1)+"`")
 			variables = append(variables, "$"+strconv.Itoa(i+1))
-			value = append(value, attrs[sorted[i]])
+			values = append(values, attrs[sorted[i]])
 		}
 		for key, val := range unique {
 			i++
 			uniqueCols = append(uniqueCols, `"`+strings.Replace(key, `"`, `""`, -1)+`"`)
 			dbColumns = append(dbColumns, "`"+strings.Replace(key, "`", "``", -1)+"`")
 			variables = append(variables, "$"+strconv.Itoa(i+1))
-			value = append(value, val)
+			values = append(values, val)
 		}
 		queryString := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT (%s) DO UPDATE SET %s",
 			`"`+strings.Replace(table, `"`, `""`, -1)+`"`,
@@ -91,14 +95,14 @@ func BuildSql(db *sql.DB, table string, model interface{}, options...int) (strin
 			strings.Join(uniqueCols, ", "),
 			strings.Join(setColumns, ", "),
 		)
-		return queryString, value, nil
+		return queryString, values, nil
 	case DriverOracle:
 		uniqueCols := make([]string, 0)
 		inColumns := make([]string, 0)
-		value := make([]interface{}, 0, len(attrs)*2)
+		values := make([]interface{}, 0, len(attrs)*2)
 		insertCols := make([]string, 0)
 		for v, key := range sorted {
-			value = append(value, attrs[key])
+			values = append(values, attrs[key])
 			tkey := `"` + strings.Replace(key, `"`, `""`, -1) + `"`
 			tkey = strings.ToUpper(tkey)
 			setColumns = append(setColumns, "a."+tkey+" = temp."+tkey)
@@ -113,7 +117,7 @@ func BuildSql(db *sql.DB, table string, model interface{}, options...int) (strin
 			uniqueCols = append(uniqueCols, onDupe)
 			variables = append(variables, fmt.Sprintf(":%s "+tkey, key))
 			inColumns = append(inColumns, "temp."+key)
-			value = append(value, val)
+			values = append(values, val)
 			insertCols = append(insertCols, tkey)
 		}
 		//for _, key := range sorted {
@@ -127,21 +131,42 @@ func BuildSql(db *sql.DB, table string, model interface{}, options...int) (strin
 			strings.Join(insertCols, ", "),
 			strings.Join(inColumns, ", "),
 		)
-		return queryString, value, nil
+		return queryString, values, nil
 	case DriverSqlite3, DriverMysql:
-		value := make([]interface{}, 0, len(attrs)*2)
+		values := make([]interface{}, 0, len(attrs)*2)
+		updates := make([]interface{}, 0)
+		for key, val := range unique {
+			_, notNil := nattrs[key]
+			//mainScope.AddToVars(attrs[key])
+			if notNil {
+				v, ok := GetDBValue(val)
+				dbColumns = append(dbColumns, "`"+strings.Replace(key, "`", "``", -1)+"`")
+				if ok {
+					variables = append(variables, v)
+				} else {
+					variables = append(variables, "?")
+					values = append(values, val)
+				}
+			}
+		}
 		for _, key := range sorted {
 			//mainScope.AddToVars(attrs[key])
-			setColumns = append(setColumns, "`"+strings.Replace(key, "`", "``", -1)+"`"+" = ?")
-			dbColumns = append(dbColumns, "`"+strings.Replace(key, "`", "``", -1)+"`")
-			variables = append(variables, "?")
-			value = append(value, attrs[key])
-		}
-		for key, val := range unique {
-			//mainScope.AddToVars(attrs[key])
-			dbColumns = append(dbColumns, "`"+strings.Replace(key, "`", "``", -1)+"`")
-			variables = append(variables, "?")
-			value = append(value, val)
+			val, notNil := nattrs[key]
+			if notNil {
+				v, ok := GetDBValue(val)
+				dbColumns = append(dbColumns, "`"+strings.Replace(key, "`", "``", -1)+"`")
+				if ok {
+					setColumns = append(setColumns, "`"+strings.Replace(key, "`", "``", -1)+"`"+" = " + v)
+					variables = append(variables, v)
+				} else {
+					setColumns = append(setColumns, "`"+strings.Replace(key, "`", "``", -1)+"`"+" = ?")
+					variables = append(variables, "?")
+					values = append(values, val)
+					updates = append(updates, val)
+				}
+			} else {
+				setColumns = append(setColumns, "`"+strings.Replace(key, "`", "``", -1)+"`"+" = null")
+			}
 		}
 		valueQuery := "(" + strings.Join(variables, ", ") + ")"
 		placeholders = append(placeholders, valueQuery)
@@ -151,26 +176,26 @@ func BuildSql(db *sql.DB, table string, model interface{}, options...int) (strin
 			strings.Join(placeholders, ", "),
 			strings.Join(setColumns, ", "),
 		)
-		for _, s := range sorted {
-			value = append(value, attrs[s])
+		for _, s := range updates {
+			values = append(values, s)
 		}
-		return queryString, value, nil
+		return queryString, values, nil
 	case DriverMssql:
 		uniqueCols := make([]string, 0)
-		value := make([]interface{}, 0, len(attrs)*2)
+		values := make([]interface{}, 0, len(attrs)*2)
 		for _, key := range sorted {
 			//mainScope.AddToVars(attrs[key])
 			tkey := `"` + strings.Replace(key, `"`, `""`, -1) + `"`
 			dbColumns = append(dbColumns, tkey)
 			variables = append(variables, "?")
-			value = append(value, attrs[key])
+			values = append(values, attrs[key])
 			setColumns = append(setColumns, tkey+" = temp."+tkey)
 		}
 		for i, val := range unique {
 			tkey := `"` + strings.Replace(i, `"`, `""`, -1) + `"`
 			dbColumns = append(dbColumns, `"`+strings.Replace(tkey, `"`, `""`, -1)+`"`)
 			variables = append(variables, "?")
-			value = append(value, val)
+			values = append(values, val)
 			onDupe := table + "." + tkey + " = " + "temp." + tkey
 			uniqueCols = append(uniqueCols, onDupe)
 		}
@@ -183,7 +208,7 @@ func BuildSql(db *sql.DB, table string, model interface{}, options...int) (strin
 			strings.Join(dbColumns, ", "),
 			strings.Join(variables, ", "),
 		)
-		return queryString, value, nil
+		return queryString, values, nil
 	default:
 		return "", nil, fmt.Errorf("unsupported db vendor")
 	}

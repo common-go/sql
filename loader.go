@@ -85,15 +85,15 @@ func (s *Loader) Exist(ctx context.Context, id interface{}) (bool, error) {
 		values = append(values, id)
 		colNumber++
 	} else {
-		queres := make([]string, 0)
+		conditions := make([]string, 0)
 		var ids = id.(map[string]interface{})
 		for k, idk := range ids {
 			columnName := s.mapJsonColumnKeys[k]
-			queres = append(queres, fmt.Sprintf("%s = %s", columnName, s.BuildParam(colNumber)))
+			conditions = append(conditions, fmt.Sprintf("%s = %s", columnName, s.BuildParam(colNumber)))
 			values = append(values, idk)
 			colNumber++
 		}
-		where = "where " + strings.Join(queres, " and ")
+		where = "where " + strings.Join(conditions, " and ")
 	}
 	row := s.Database.QueryRowContext(ctx, fmt.Sprintf("select count(*) from %s %s", s.table, where), values...)
 	if err := row.Scan(&count); err != nil {

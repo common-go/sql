@@ -51,7 +51,7 @@ func (w *BatchUpdater) Write(ctx context.Context, models interface{}) ([]int, []
 		failIndices = ToArrayIndex(s, failIndices)
 		return successIndices, failIndices, err1
 	}
-	_, err := UpdateMany(ctx, w.db, w.tableName, _models, w.BuildParam)
+	_, err := UpdateInTransaction(ctx, w.db, w.tableName, _models, w.BuildParam)
 
 	if err == nil {
 		// Return full success

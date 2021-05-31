@@ -29,7 +29,7 @@ func Find(slice []string, val string) (int, bool) {
 	return -1, false
 }
 
-func BuildInsertSql(table string, model interface{}, i int, buildParam func(int) string) (string, []interface{}) {
+func BuildInsert(table string, model interface{}, i int, buildParam func(int) string) (string, []interface{}) {
 	mapData, mapKey, columns, keys := BuildMapDataAndKeys(model, false)
 	var cols []string
 	var values []interface{}
@@ -66,7 +66,7 @@ func BuildInsertSql(table string, model interface{}, i int, buildParam func(int)
 	return fmt.Sprintf("insert into %v(%v)values(%v)", table, column, strings.Join(params, ",")), values
 }
 
-func BuildInsertSqlWithVersion(table string, model interface{}, i int, versionIndex int, buildParam func(int) string) (string, []interface{}) {
+func BuildInsertWithVersion(table string, model interface{}, i int, versionIndex int, buildParam func(int) string) (string, []interface{}) {
 	if versionIndex < 0 {
 		panic("version index not found")
 	}

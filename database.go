@@ -200,7 +200,7 @@ func Insert(ctx context.Context, db *sql.DB, table string, model interface{}, op
 	} else {
 		buildParam = GetBuild(db)
 	}
-	queryInsert, values := BuildInsertSql(table, model, 0, buildParam)
+	queryInsert, values := BuildInsert(table, model, 0, buildParam)
 
 	result, err := db.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
@@ -235,7 +235,7 @@ func InsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model i
 	} else {
 		buildParam = GetBuild(db)
 	}
-	queryInsert, values := BuildInsertSql(table, model, 0, buildParam)
+	queryInsert, values := BuildInsert(table, model, 0, buildParam)
 	result, err := tx.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
 		return handleDuplicate(db, err)
@@ -253,7 +253,7 @@ func InsertWithVersion(ctx context.Context, db *sql.DB, table string, model inte
 	} else {
 		buildParam = GetBuild(db)
 	}
-	queryInsert, values := BuildInsertSqlWithVersion(table, model, 0, versionIndex, buildParam)
+	queryInsert, values := BuildInsertWithVersion(table, model, 0, versionIndex, buildParam)
 
 	result, err := db.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
@@ -291,7 +291,7 @@ func Update(ctx context.Context, db *sql.DB, table string, model interface{}, op
 	} else {
 		buildParam = GetBuild(db)
 	}
-	query, values := BuildUpdateSql(table, model, 0, buildParam)
+	query, values := BuildUpdate(table, model, 0, buildParam)
 	r, err0 := db.ExecContext(ctx, query, values...)
 	if err0 != nil {
 		return -1, err0
@@ -306,7 +306,7 @@ func UpdateTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model i
 	} else {
 		buildParam = GetBuild(db)
 	}
-	query, values := BuildUpdateSql(table, model, 0, buildParam)
+	query, values := BuildUpdate(table, model, 0, buildParam)
 	r, err0 := tx.ExecContext(ctx, query, values...)
 	if err0 != nil {
 		return -1, err0
@@ -325,7 +325,7 @@ func UpdateWithVersion(ctx context.Context, db *sql.DB, table string, model inte
 	} else {
 		buildParam = GetBuild(db)
 	}
-	query, values := BuildUpdateSqlWithVersion(table, model, 0, versionIndex, buildParam)
+	query, values := BuildUpdateWithVersion(table, model, 0, versionIndex, buildParam)
 
 	result, err := db.ExecContext(ctx, query, values...)
 
@@ -395,7 +395,7 @@ func Delete(ctx context.Context, db *sql.DB, table string, query map[string]inte
 	} else {
 		buildParam = GetBuild(db)
 	}
-	sql, values := BuildDeleteSql(table, query, buildParam)
+	sql, values := BuildDelete(table, query, buildParam)
 
 	result, err := db.ExecContext(ctx, sql, values...)
 
@@ -431,7 +431,7 @@ func GetFieldByJson(modelType reflect.Type, jsonName string) (int, string, strin
 	return -1, jsonName, jsonName
 }
 
-func BuildUpdateSql(table string, model interface{}, i int, buildParam func(int) string) (string, []interface{}) {
+func BuildUpdate(table string, model interface{}, i int, buildParam func(int) string) (string, []interface{}) {
 	mapData, mapKey, columns, keys := BuildMapDataAndKeys(model, true)
 	var values []interface{}
 	colSet := make([]string, 0)
@@ -486,7 +486,7 @@ func GetDBValue(v interface{}) (string, bool) {
 		return "", false
 	}
 }
-func BuildUpdateSqlWithVersion(table string, model interface{}, i int, versionIndex int, buildParam func(int) string) (string, []interface{}) {
+func BuildUpdateWithVersion(table string, model interface{}, i int, versionIndex int, buildParam func(int) string) (string, []interface{}) {
 	if versionIndex < 0 {
 		panic("version's index not found")
 	}
@@ -630,7 +630,7 @@ func BuildPatchWithVersion(table string, model map[string]interface{}, mapJsonCo
 	return query, value
 }
 
-func BuildDeleteSql(table string, ids map[string]interface{}, buildParam func(int) string) (string, []interface{}) {
+func BuildDelete(table string, ids map[string]interface{}, buildParam func(int) string) (string, []interface{}) {
 	var values []interface{}
 	var queryArr []string
 	i := 1

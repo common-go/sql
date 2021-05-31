@@ -615,7 +615,73 @@ func UpdateInTransaction(ctx context.Context, db *sql.DB, tableName string, obje
 	total := int64(len(query))
 	return total, err
 }
+func PatchInTransaction(ctx context.Context, db *sql.DB, tableName string, objects []map[string]interface{}, idTagJsonNames []string, idColumNames []string, options...func(i int) string) (int64, error) {
+	var buildParam func(i int) string
+	if len(options) > 0 && options[0] != nil {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(db)
+	}
+	var query []string
+	var value [][]interface{}
+	if len(objects) == 0 {
+		return 0, nil
+	}
+	for _, obj := range objects {
+		scope := statement()
+		// Append variables set column
+		for key, _ := range obj {
+			if _, ok := Find(idTagJsonNames, key); !ok {
+				scope.Columns = append(scope.Columns, key)
+				scope.Values = append(scope.Values, obj[key])
+			}
+		}
+		// Append variables where
+		for i, key := range idTagJsonNames {
+			scope.Values = append(scope.Values, obj[key])
+			scope.Keys = append(scope.Keys, idColumNames[i])
+		}
 
+		n := len(scope.Columns)
+		sets, setVal, err1 := BuildSqlParametersAndValues(scope.Columns, scope.Values, &n, 0, ", ", buildParam)
+		if err1 != nil {
+			return 0, err1
+		}
+		value = append(value, setVal)
+		numKeys := len(scope.Keys)
+		where, whereVal, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &numKeys, n, " and ", buildParam)
+		if err2 != nil {
+			return 0, err2
+		}
+		value = append(value, whereVal)
+		query = append(query, fmt.Sprintf("update %s set %s where %s",
+			tableName,
+			sets,
+			where,
+		))
+	}
+
+
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, err
+	}
+
+	for i := 0; i < len(query); i++ {
+		_, execErr := tx.ExecContext(ctx, query[i], value[i]...)
+		if execErr != nil {
+			_ = tx.Rollback()
+			return 0, execErr
+		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return 0, err
+	}
+	total := int64(len(query))
+	return total, err
+}
 func PatchMaps(ctx context.Context, db *sql.DB, tableName string, objects []map[string]interface{}, idTagJsonNames []string, idColumNames []string, options...func(i int) string) (int64, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {

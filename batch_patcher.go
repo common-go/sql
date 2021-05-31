@@ -38,7 +38,7 @@ func NewBatchPatcherWithIds(db *sql.DB, tableName string, modelType reflect.Type
 func (w *BatchPatcher) Write(ctx context.Context, models []map[string]interface{}) ([]int, []int, error) {
 	successIndices := make([]int, 0)
 	failIndices := make([]int, 0)
-	_, err := PatchMaps(ctx, w.db, w.tableName, models, w.idNames, w.idJsonName, w.buildParam)
+	_, err := PatchInTransaction(ctx, w.db, w.tableName, models, w.idNames, w.idJsonName, w.buildParam)
 
 	if err == nil {
 		// Return full success

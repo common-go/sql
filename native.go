@@ -11,7 +11,7 @@ import (
 
 // raw query
 func Save(ctx context.Context, db *sql.DB, table string, model interface{}) (int64, error) {
-	queryString, value, err := BuildSql(db, table, model)
+	queryString, value, err := BuildSave(db, table, model)
 	if err != nil {
 		return 0, err
 	}
@@ -24,7 +24,7 @@ func Save(ctx context.Context, db *sql.DB, table string, model interface{}) (int
 }
 
 func SaveTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}) (int64, error) {
-	query, values, err0 := BuildSql(db, table, model)
+	query, values, err0 := BuildSave(db, table, model)
 	if err0 != nil {
 		return -1, err0
 	}
@@ -35,7 +35,7 @@ func SaveTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model int
 	return r.RowsAffected()
 }
 
-func BuildSql(db *sql.DB, table string, model interface{}) (string, []interface{}, error) {
+func BuildSave(db *sql.DB, table string, model interface{}) (string, []interface{}, error) {
 	placeholders := make([]string, 0)
 	exclude := make([]string, 0)
 	modelType := reflect.Indirect(reflect.ValueOf(model)).Type()

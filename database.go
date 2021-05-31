@@ -643,10 +643,8 @@ func BuildDelete(table string, ids map[string]interface{}, buildParam func(int) 
 	return fmt.Sprintf("delete from %v where %v", table, q), values
 }
 
-// Obtain columns and values required for insert from interface
-func ExtractMapValue(value interface{}, excludeColumns *[]string, ignoreNull bool) (map[string]interface{}, map[string]interface{}, map[string]interface{}, error) {
+func ExtractBySchema(value interface{}, columns []string, schema map[string]FieldDB) (map[string]interface{}, map[string]interface{}, map[string]interface{}, error) {
 	rv := reflect.ValueOf(value)
-	// modelType := reflect.TypeOf(value)
 	if rv.Kind() == reflect.Ptr {
 		rv = rv.Elem()
 		value = rv.Interface()
@@ -656,7 +654,62 @@ func ExtractMapValue(value interface{}, excludeColumns *[]string, ignoreNull boo
 	}
 
 	var attrs = map[string]interface{}{}
-	var attrs2 = map[string]interface{}{}
+	var nAttrs = map[string]interface{}{}
+	var attrsKey = map[string]interface{}{}
+
+	for _, col := range columns {
+		fdb, ok := schema[col]
+		if ok {
+			f := rv.Field(fdb.index)
+			fieldValue := f.Interface()
+			isNil := false
+			if f.Kind() == reflect.Ptr {
+				if reflect.ValueOf(fieldValue).IsNil() {
+					isNil = true
+				} else {
+					fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
+				}
+			}
+			if !fdb.key {
+				if !isNil {
+					if boolValue, ok := fieldValue.(bool); ok {
+						if boolValue {
+							attrs[col] = fdb.true
+							nAttrs[col] = fdb.true
+						} else {
+							attrs[col] = fdb.false
+							nAttrs[col] = fdb.false
+						}
+					} else {
+						attrs[col] = fieldValue
+						nAttrs[col] = fieldValue
+					}
+				} else {
+					attrs[col] = fieldValue
+				}
+			} else {
+				attrsKey[col] = fieldValue
+				if !isNil {
+					nAttrs[col] = fieldValue
+				}
+			}
+		}
+	}
+	return attrs, attrsKey, nAttrs, nil
+}
+// Obtain columns and values required for insert from interface
+func ExtractMapValue(value interface{}, excludeColumns *[]string, ignoreNull bool) (map[string]interface{}, map[string]interface{}, map[string]interface{}, error) {
+	rv := reflect.ValueOf(value)
+	if rv.Kind() == reflect.Ptr {
+		rv = rv.Elem()
+		value = rv.Interface()
+	}
+	if rv.Kind() != reflect.Struct {
+		return nil, nil, nil, errors.New("value must be kind of Struct")
+	}
+
+	var attrs = map[string]interface{}{}
+	var nAttrs = map[string]interface{}{}
 	var attrsKey = map[string]interface{}{}
 
 	for index, field := range GetMapField(value) {
@@ -682,10 +735,10 @@ func ExtractMapValue(value interface{}, excludeColumns *[]string, ignoreNull boo
 					if boolValue, ok := fieldValue.(bool); ok {
 						bv := field.Type.Field(index).Tag.Get(strconv.FormatBool(boolValue))
 						attrs[dBName] = bv
-						attrs2[dBName] = bv
+						nAttrs[dBName] = bv
 					} else {
 						attrs[dBName] = fieldValue
-						attrs2[dBName] = fieldValue
+						nAttrs[dBName] = fieldValue
 					}
 				} else {
 					attrs[dBName] = fieldValue
@@ -697,12 +750,12 @@ func ExtractMapValue(value interface{}, excludeColumns *[]string, ignoreNull boo
 			if dBName, ok := field.Tags[DBName]; ok {
 				attrsKey[dBName] = fieldValue
 				if !isNil {
-					attrs2[dBName] = fieldValue
+					nAttrs[dBName] = fieldValue
 				}
 			}
 		}
 	}
-	return attrs, attrsKey, attrs2, nil
+	return attrs, attrsKey, nAttrs, nil
 }
 
 func GetIndexByTag(tag, key string, modelType reflect.Type) (index int) {

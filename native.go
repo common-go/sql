@@ -20,7 +20,6 @@ func Save(ctx context.Context, db *sql.DB, table string, model interface{}) (int
 		return 0, err
 	}
 	return res.RowsAffected()
-
 }
 
 func SaveTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}) (int64, error) {
@@ -51,7 +50,7 @@ func BuildSave(db *sql.DB, table string, model interface{}) (string, []interface
 		}
 	}
 
-	attrs, unique, nattrs, err := ExtractMapValue(model, &exclude, false)
+	attrs, unique, nAttrs, err := ExtractMapValue(model, &exclude, false)
 	if err != nil {
 		return "0", nil, fmt.Errorf("cannot extract object's values: %w", err)
 	}
@@ -63,15 +62,10 @@ func BuildSave(db *sql.DB, table string, model interface{}) (string, []interface
 	sorted := SortedKeys(attrs)
 
 	// Also append variables to mainScope
-
 	var setColumns []string
-	dialect := GetDriver(db)
+	driver := GetDriver(db)
 	i := 0
-	/*
-	if len(options) > 0 && options[0] > 0 {
-		i = options[0]
-	}*/
-	switch dialect {
+	switch driver {
 	case DriverPostgres:
 		uniqueCols := make([]string, 0)
 		values := make([]interface{}, 0, len(attrs)*2)
@@ -88,14 +82,14 @@ func BuildSave(db *sql.DB, table string, model interface{}) (string, []interface
 			variables = append(variables, "$"+strconv.Itoa(i+1))
 			values = append(values, val)
 		}
-		queryString := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT (%s) DO UPDATE SET %s",
+		query := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT (%s) DO UPDATE SET %s",
 			`"`+strings.Replace(table, `"`, `""`, -1)+`"`,
 			strings.Join(dbColumns, ", "),
 			strings.Join(variables, ", "),
 			strings.Join(uniqueCols, ", "),
 			strings.Join(setColumns, ", "),
 		)
-		return queryString, values, nil
+		return query, values, nil
 	case DriverOracle:
 		uniqueCols := make([]string, 0)
 		inColumns := make([]string, 0)
@@ -123,7 +117,7 @@ func BuildSave(db *sql.DB, table string, model interface{}) (string, []interface
 		//for _, key := range sorted {
 		//	value = append(value, attrs[key])
 		//}
-		queryString := fmt.Sprintf("MERGE INTO %s a USING (SELECT %s FROM dual) temp ON  (%s) WHEN MATCHED THEN UPDATE SET %s WHEN NOT MATCHED THEN INSERT (%s) VALUES (%s)",
+		query := fmt.Sprintf("MERGE INTO %s a USING (SELECT %s FROM dual) temp ON  (%s) WHEN MATCHED THEN UPDATE SET %s WHEN NOT MATCHED THEN INSERT (%s) VALUES (%s)",
 			`"`+strings.Replace(table, `"`, `""`, -1)+`"`,
 			strings.Join(variables, ", "),
 			strings.Join(uniqueCols, " AND "),
@@ -131,12 +125,12 @@ func BuildSave(db *sql.DB, table string, model interface{}) (string, []interface
 			strings.Join(insertCols, ", "),
 			strings.Join(inColumns, ", "),
 		)
-		return queryString, values, nil
-	case DriverSqlite3, DriverMysql:
+		return query, values, nil
+	case DriverMysql:
 		values := make([]interface{}, 0, len(attrs)*2)
 		updates := make([]interface{}, 0)
 		for key, val := range unique {
-			_, notNil := nattrs[key]
+			_, notNil := nAttrs[key]
 			//mainScope.AddToVars(attrs[key])
 			if notNil {
 				v, ok := GetDBValue(val)
@@ -151,7 +145,7 @@ func BuildSave(db *sql.DB, table string, model interface{}) (string, []interface
 		}
 		for _, key := range sorted {
 			//mainScope.AddToVars(attrs[key])
-			val, notNil := nattrs[key]
+			val, notNil := nAttrs[key]
 			if notNil {
 				v, ok := GetDBValue(val)
 				dbColumns = append(dbColumns, "`"+strings.Replace(key, "`", "``", -1)+"`")
@@ -170,7 +164,7 @@ func BuildSave(db *sql.DB, table string, model interface{}) (string, []interface
 		}
 		valueQuery := "(" + strings.Join(variables, ", ") + ")"
 		placeholders = append(placeholders, valueQuery)
-		queryString := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON DUPLICATE KEY UPDATE %s",
+		query := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON DUPLICATE KEY UPDATE %s",
 			"`"+strings.Replace(table, "`", "``", -1)+"`",
 			strings.Join(dbColumns, ", "),
 			strings.Join(placeholders, ", "),
@@ -179,7 +173,7 @@ func BuildSave(db *sql.DB, table string, model interface{}) (string, []interface
 		for _, s := range updates {
 			values = append(values, s)
 		}
-		return queryString, values, nil
+		return query, values, nil
 	case DriverMssql:
 		uniqueCols := make([]string, 0)
 		values := make([]interface{}, 0, len(attrs)*2)
@@ -199,7 +193,7 @@ func BuildSave(db *sql.DB, table string, model interface{}) (string, []interface
 			onDupe := table + "." + tkey + " = " + "temp." + tkey
 			uniqueCols = append(uniqueCols, onDupe)
 		}
-		queryString := fmt.Sprintf("MERGE INTO %s USING (VALUES %s) AS temp (%s) ON %s WHEN MATCHED THEN UPDATE SET %s WHEN NOT MATCHED THEN INSERT (%s) VALUES %s;",
+		query := fmt.Sprintf("MERGE INTO %s USING (VALUES %s) AS temp (%s) ON %s WHEN MATCHED THEN UPDATE SET %s WHEN NOT MATCHED THEN INSERT (%s) VALUES %s;",
 			`"`+strings.Replace(table, `"`, `""`, -1)+`"`,
 			strings.Join(variables, ", "),
 			strings.Join(dbColumns, ", "),
@@ -208,7 +202,7 @@ func BuildSave(db *sql.DB, table string, model interface{}) (string, []interface
 			strings.Join(dbColumns, ", "),
 			strings.Join(variables, ", "),
 		)
-		return queryString, values, nil
+		return query, values, nil
 	default:
 		return "", nil, fmt.Errorf("unsupported db vendor")
 	}

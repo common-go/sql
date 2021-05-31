@@ -8,48 +8,34 @@ import (
 	"strings"
 )
 
-// Field model field definition
-type Field struct {
-	Tags  map[string]string
-	Value reflect.Value
-	Type  reflect.Type
-}
-
-func GetMapField(object interface{}) []Field {
-	modelType := reflect.TypeOf(object)
-	value := reflect.Indirect(reflect.ValueOf(object))
-	var result []Field
-	numField := modelType.NumField()
-
-	for i := 0; i < numField; i++ {
-		field := modelType.Field(i)
-		selectField := Field{Value: value.Field(i), Type: modelType}
-		gormTag, ok := field.Tag.Lookup("gorm")
-		tag := make(map[string]string)
-		tag["fieldName"] = field.Name
-		if ok {
-			str1 := strings.Split(gormTag, ";")
-			for k := 0; k < len(str1); k++ {
-				str2 := strings.Split(str1[k], ":")
-				if len(str2) == 1 {
-					tag[str2[0]] = str2[0]
-					selectField.Tags = tag
-				} else {
-					tag[str2[0]] = str2[1]
-					selectField.Tags = tag
-				}
-			}
-			result = append(result, selectField)
-		}
-	}
-	return result
-}
-
 func ExecuteStatements(ctx context.Context, db *sql.DB, sts []Statement) (int64, error) {
 	return ExecuteBatch(ctx, db, sts, true, false)
 }
-func ExecuteAll(ctx context.Context, db *sql.DB, sts []Statement) (int64, error) {
-	return ExecuteBatch(ctx, db, sts, false, true)
+func ExecuteAll(ctx context.Context, db *sql.DB, stmts []Statement) (int64, error) {
+	tx, er1 := db.Begin()
+	if er1 != nil {
+		return 0, er1
+	}
+	var count int64
+	count = 0
+	for _, stmt := range stmts {
+		r2, er3 := tx.ExecContext(ctx, stmt.Query, stmt.Args...)
+		if er3 != nil {
+			er4 := tx.Rollback()
+			if er4 != nil {
+				return count, er4
+			}
+			return count, er3
+		}
+		a2, er5 := r2.RowsAffected()
+		if er5 != nil {
+			tx.Rollback()
+			return count, er5
+		}
+		count = count + a2
+	}
+	er6 := tx.Commit()
+	return count, er6
 }
 func ExecuteBatch(ctx context.Context, db *sql.DB, sts []Statement, firstRowSuccess bool, countAll bool) (int64, error) {
 	if sts == nil || len(sts) == 0 {
@@ -156,22 +142,22 @@ func (s *DefaultStatements) Clear() Statements {
 	return s
 }
 
-type fieldDB struct {
-	json   string
+type FieldDB struct {
+	JSON   string
 	column string
 	field  string
 	index  int
 	key    bool
-	update bool
+	Update bool
 	true   string
 	false  string
 }
 
-func makeSchema(modelType reflect.Type) ([]string, []string, map[string]fieldDB) {
+func MakeSchema(modelType reflect.Type) ([]string, []string, map[string]FieldDB) {
 	numField := modelType.NumField()
 	columns := make([]string, 0)
 	keys := make([]string, 0)
-	schema := make(map[string]fieldDB, 0)
+	schema := make(map[string]FieldDB, 0)
 	for idx := 0; idx < numField; idx++ {
 		field := modelType.Field(idx)
 		tag, _ := field.Tag.Lookup("gorm")
@@ -198,12 +184,12 @@ func makeSchema(modelType reflect.Type) ([]string, []string, map[string]fieldDB)
 								tagJsons := strings.Split(jTag, ",")
 								json = tagJsons[0]
 							}
-							f := fieldDB{
-								json: json,
+							f := FieldDB{
+								JSON: json,
 								column: col,
 								index: idx,
 								key: isKey,
-								update: update,
+								Update: update,
 							}
 							tTag, tOk := field.Tag.Lookup("true")
 							if tOk {
@@ -222,21 +208,17 @@ func makeSchema(modelType reflect.Type) ([]string, []string, map[string]fieldDB)
 	}
 	return columns, keys, schema
 }
-func BuildUpdateBatch(table string, models interface{}, buildParam func(int) string, options ...int) ([]Statement, error) {
-	i := 0
-	if len(options) > 0 && options[0] > 0 {
-		i = options[0]
-	}
+func BuildUpdateBatch(table string, models interface{}, buildParam func(int) string) ([]Statement, error) {
 	s := reflect.Indirect(reflect.ValueOf(models))
 	if s.Kind() != reflect.Slice {
 		return nil, fmt.Errorf("models is not a slice")
 	}
-	if s.Len() == 0 {
+	if s.Len() <= 0 {
 		return nil, nil
 	}
-	first := s.Index(i).Interface()
+	first := s.Index(0).Interface()
 	modelType := reflect.TypeOf(first)
-	cols, keys, schema := makeSchema(modelType)
+	cols, keys, schema := MakeSchema(modelType)
 	slen := s.Len()
 	stmts := make([]Statement, 0)
 	for j := 0; j < slen; j++ {
@@ -245,9 +227,10 @@ func BuildUpdateBatch(table string, models interface{}, buildParam func(int) str
 		values := make([]string, 0)
 		where := make([]string, 0)
 		args := make([]interface{}, 0)
+		i := 1
 		for _, col := range cols {
 			fdb := schema[col]
-			if !fdb.key {
+			if !fdb.key && !fdb.Update {
 				f := mv.Field(fdb.index)
 				fieldValue := f.Interface()
 				isNil := false
@@ -259,13 +242,13 @@ func BuildUpdateBatch(table string, models interface{}, buildParam func(int) str
 					}
 				}
 				if isNil {
-					values = append(values, "null")
+					values = append(values, col + "=null")
 				} else {
 					v, ok := GetDBValue(fieldValue)
 					if ok {
 						values = append(values, col + "=" + v)
 					} else {
-						values = append(values, col + "=" + buildParam(i+1))
+						values = append(values, col + "=" + buildParam(i))
 						i = i + 1
 						args = append(args, fieldValue)
 					}
@@ -296,7 +279,7 @@ func BuildUpdateBatch(table string, models interface{}, buildParam func(int) str
 	}
 	return stmts, nil
 }
-func BuildInsertBatch(db *sql.DB, table string, models interface{}, i int, options ...func(int) string) (string, []interface{}, error) {
+func BuildInsertBatch(db *sql.DB, table string, models interface{}, options ...func(int) string) (string, []interface{}, error) {
 	var buildParam func(int) string
 	if len(options) > 0 {
 		buildParam = options[0]
@@ -313,9 +296,9 @@ func BuildInsertBatch(db *sql.DB, table string, models interface{}, i int, optio
 	}
 	placeholders := make([]string, 0)
 	args := make([]interface{}, 0)
-	first := s.Index(i).Interface()
+	first := s.Index(0).Interface()
 	modelType := reflect.TypeOf(first)
-	cols, _, schema := makeSchema(modelType)
+	cols, _, schema := MakeSchema(modelType)
 	driver := GetDriver(db)
 	slen := s.Len()
 	if driver != DriverOracle {
@@ -323,6 +306,7 @@ func BuildInsertBatch(db *sql.DB, table string, models interface{}, i int, optio
 			model := s.Index(j).Interface()
 			mv := reflect.ValueOf(model)
 			values := make([]string, 0)
+			i := 1
 			for _, col := range cols {
 				fdb := schema[col]
 				f := mv.Field(fdb.index)
@@ -342,7 +326,7 @@ func BuildInsertBatch(db *sql.DB, table string, models interface{}, i int, optio
 					if ok {
 						values = append(values, v)
 					} else {
-						values = append(values, buildParam(i+1))
+						values = append(values, buildParam(i))
 						i = i + 1
 						args = append(args, fieldValue)
 					}
@@ -363,6 +347,7 @@ func BuildInsertBatch(db *sql.DB, table string, models interface{}, i int, optio
 			mv := reflect.ValueOf(model)
 			iCols := make([]string, 0)
 			values := make([]string, 0)
+			i := 1
 			for _, col := range cols {
 				fdb := schema[col]
 				f := mv.Field(fdb.index)
@@ -381,7 +366,7 @@ func BuildInsertBatch(db *sql.DB, table string, models interface{}, i int, optio
 					if ok {
 						values = append(values, v)
 					} else {
-						values = append(values, buildParam(i+1))
+						values = append(values, buildParam(i))
 						i = i + 1
 						args = append(args, fieldValue)
 					}
@@ -394,9 +379,230 @@ func BuildInsertBatch(db *sql.DB, table string, models interface{}, i int, optio
 		return query, args, nil
 	}
 }
+func BuildSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement, error) {
+	s := reflect.Indirect(reflect.ValueOf(models))
+	if s.Kind() != reflect.Slice {
+		return nil, fmt.Errorf("models is not a slice")
+	}
+	if s.Len() == 0 {
+		return nil, nil
+	}
+	buildParam := GetBuild(db)
+	first := s.Index(0).Interface()
+	modelType := reflect.TypeOf(first)
+	cols, keys, schema := MakeSchema(modelType)
+	slen := s.Len()
+	stmts := make([]Statement, 0)
+	driver := GetDriver(db)
+	if driver == DriverPostgres || driver == DriverMysql {
+		for j := 0; j < slen; j++ {
+			model := s.Index(j).Interface()
+			mv := reflect.ValueOf(model)
+			iCols := make([]string, 0)
+			values := make([]string, 0)
+			setColumns := make([]string, 0)
+			args := make([]interface{}, 0)
+			i := 1
+			for _, col := range cols {
+				fdb := schema[col]
+				f := mv.Field(fdb.index)
+				fieldValue := f.Interface()
+				isNil := false
+				if f.Kind() == reflect.Ptr {
+					if reflect.ValueOf(fieldValue).IsNil() {
+						isNil = true
+					} else {
+						fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
+					}
+				}
+				if !isNil {
+					iCols = append(iCols, col)
+					v, ok := GetDBValue(fieldValue)
+					if ok {
+						values = append(values, v)
+					} else {
+						values = append(values, buildParam(i))
+						i = i + 1
+						args = append(args, fieldValue)
+					}
+				}
+			}
+			for _, col := range cols {
+				fdb := schema[col]
+				if !fdb.key && !fdb.Update {
+					f := mv.Field(fdb.index)
+					fieldValue := f.Interface()
+					isNil := false
+					if f.Kind() == reflect.Ptr {
+						if reflect.ValueOf(fieldValue).IsNil() {
+							isNil = true
+						} else {
+							fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
+						}
+					}
+					if isNil {
+						setColumns = append(setColumns, col + "=null")
+					} else {
+						v, ok := GetDBValue(fieldValue)
+						if ok {
+							setColumns = append(setColumns, col + "=" + v)
+						} else {
+							setColumns = append(setColumns, col + "=" + buildParam(i))
+							i = i + 1
+							args = append(args, fieldValue)
+						}
+					}
+				}
+			}
+			var query string
+			if driver == DriverPostgres {
+				query = fmt.Sprintf("insert into %s(%s) values (%s) on conflict (%s) do update set %s",
+					table,
+					strings.Join(iCols, ","),
+					strings.Join(values, ","),
+					strings.Join(keys, ","),
+					strings.Join(setColumns, ","),
+				)
+			} else {
+				query = fmt.Sprintf("insert into %s(%s) values (%s) on duplicate key update %s",
+					table,
+					strings.Join(iCols, ","),
+					strings.Join(values, ","),
+					strings.Join(setColumns, ","),
+				)
+			}
+			s := Statement{Query: query, Args: args}
+			stmts = append(stmts, s)
+		}
+	} else if driver == DriverSqlite3 {
+		for j := 0; j < slen; j++ {
+			model := s.Index(j).Interface()
+			mv := reflect.ValueOf(model)
+			iCols := make([]string, 0)
+			values := make([]string, 0)
+			args := make([]interface{}, 0)
+			i := 1
+			for _, col := range cols {
+				fdb := schema[col]
+				f := mv.Field(fdb.index)
+				fieldValue := f.Interface()
+				isNil := false
+				if f.Kind() == reflect.Ptr {
+					if reflect.ValueOf(fieldValue).IsNil() {
+						isNil = true
+					} else {
+						fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
+					}
+				}
+				iCols = append(iCols, col)
+				if isNil {
+					values = append(values, "null")
+				} else {
+					v, ok := GetDBValue(fieldValue)
+					if ok {
+						values = append(values, v)
+					} else {
+						values = append(values, buildParam(i))
+						i = i + 1
+						args = append(args, fieldValue)
+					}
+				}
+			}
+			query := fmt.Sprintf("insert or replace into %s(%s) values (%s)", table, strings.Join(iCols, ","), strings.Join(values, ","))
+			s := Statement{Query: query, Args: args}
+			stmts = append(stmts, s)
+		}
+	} else if driver == DriverOracle {
+		for j := 0; j < slen; j++ {
+			model := s.Index(j).Interface()
+			uniqueCols := make([]string, 0)
+			inColumns := make([]string, 0)
+			variables := make([]string, 0)
+			setColumns := make([]string, 0)
+			values := make([]interface{}, 0)
+			insertCols := make([]string, 0)
+			attrs, unique, _, err := ExtractBySchema(model, cols, schema)
+			sorted := SortedKeys(attrs)
+			if err != nil {
+				return nil, fmt.Errorf("cannot extract object's values: %w", err)
+			}
+			for v, key := range sorted {
+				values = append(values, attrs[key])
+				tkey := `"` + strings.Replace(key, `"`, `""`, -1) + `"`
+				tkey = strings.ToUpper(tkey)
+				setColumns = append(setColumns, "a."+tkey+" = temp."+tkey)
+				inColumns = append(inColumns, "temp."+key)
+				variables = append(variables, fmt.Sprintf(":%d "+tkey, v))
+				insertCols = append(insertCols, tkey)
+			}
+			for key, val := range unique {
+				tkey := `"` + strings.Replace(key, `"`, `""`, -1) + `"`
+				tkey = strings.ToUpper(tkey)
+				onDupe := "a." + tkey + " = " + "temp." + tkey
+				uniqueCols = append(uniqueCols, onDupe)
+				variables = append(variables, fmt.Sprintf(":%s "+tkey, key))
+				inColumns = append(inColumns, "temp."+key)
+				values = append(values, val)
+				insertCols = append(insertCols, tkey)
+			}
+			query := fmt.Sprintf("MERGE INTO %s a USING (SELECT %s FROM dual) temp ON  (%s) WHEN MATCHED THEN UPDATE SET %s WHEN NOT MATCHED THEN INSERT (%s) VALUES (%s)",
+				`"`+strings.Replace(table, `"`, `""`, -1)+`"`,
+				strings.Join(variables, ", "),
+				strings.Join(uniqueCols, " AND "),
+				strings.Join(setColumns, ", "),
+				strings.Join(insertCols, ", "),
+				strings.Join(inColumns, ", "),
+			)
+			s := Statement{Query: query, Args: values}
+			stmts = append(stmts, s)
+		}
+	} else if driver == DriverMssql {
+		for j := 0; j < slen; j++ {
+			model := s.Index(j).Interface()
+			uniqueCols := make([]string, 0)
+			dbColumns := make([]string, 0)
+			variables := make([]string, 0)
+			setColumns := make([]string, 0)
+			values := make([]interface{}, 0)
+			attrs, unique, _, err := ExtractBySchema(model, cols, schema)
+			sorted := SortedKeys(attrs)
+			if err != nil {
+				return nil, fmt.Errorf("cannot extract object's values: %w", err)
+			}
+			for _, key := range sorted {
+				//mainScope.AddToVars(attrs[key])
+				tkey := `"` + strings.Replace(key, `"`, `""`, -1) + `"`
+				dbColumns = append(dbColumns, tkey)
+				variables = append(variables, "?")
+				values = append(values, attrs[key])
+				setColumns = append(setColumns, tkey+" = temp."+tkey)
+			}
+			for i, val := range unique {
+				tkey := `"` + strings.Replace(i, `"`, `""`, -1) + `"`
+				dbColumns = append(dbColumns, `"`+strings.Replace(tkey, `"`, `""`, -1)+`"`)
+				variables = append(variables, "?")
+				values = append(values, val)
+				onDupe := table + "." + tkey + " = " + "temp." + tkey
+				uniqueCols = append(uniqueCols, onDupe)
+			}
+			query := fmt.Sprintf("MERGE INTO %s USING (VALUES %s) AS temp (%s) ON %s WHEN MATCHED THEN UPDATE SET %s WHEN NOT MATCHED THEN INSERT (%s) VALUES %s;",
+				`"`+strings.Replace(table, `"`, `""`, -1)+`"`,
+				strings.Join(variables, ", "),
+				strings.Join(dbColumns, ", "),
+				strings.Join(uniqueCols, " AND "),
+				strings.Join(setColumns, ", "),
+				strings.Join(dbColumns, ", "),
+				strings.Join(variables, ", "),
+			)
+			s := Statement{Query: query, Args: values}
+			stmts = append(stmts, s)
+		}
+	}
+	return stmts, nil
+}
 
 func InsertMany(ctx context.Context, db *sql.DB, tableName string, models interface{}, options ...func(int) string) (int64, error) {
-	query, args, er1 := BuildInsertBatch(db, tableName, models, 0, options...)
+	query, args, er1 := BuildInsertBatch(db, tableName, models, options...)
 	if er1 != nil {
 		return 0, er1
 	}
@@ -406,7 +612,6 @@ func InsertMany(ctx context.Context, db *sql.DB, tableName string, models interf
 	}
 	return x.RowsAffected()
 }
-
 func UpdateMany(ctx context.Context, db *sql.DB, tableName string, models interface{}, options ...func(int) string) (int64, error) {
 	var buildParam func(int) string
 	if len(options) > 0 {
@@ -418,21 +623,14 @@ func UpdateMany(ctx context.Context, db *sql.DB, tableName string, models interf
 	if er1 != nil {
 		return 0, er1
 	}
-	tx, err := db.Begin()
-	if err != nil {
-		return 0, err
+	return ExecuteAll(ctx, db, stmts)
+}
+func SaveMany(ctx context.Context, db *sql.DB, tableName string, models interface{}) (int64, error) {
+	stmts, er1 := BuildSaveBatch(db, tableName, models)
+	if er1 != nil {
+		return 0, er1
 	}
-	for _, stmt := range stmts {
-		_, execErr := tx.ExecContext(ctx, stmt.Query, stmt.Args...)
-		if execErr != nil {
-			_ = tx.Rollback()
-			return 0, execErr
-		}
-	}
-	err = tx.Commit()
-	if err != nil {
-		return 0, err
-	}
+	_, err := ExecuteAll(ctx, db, stmts)
 	total := int64(len(stmts))
 	return total, err
 }

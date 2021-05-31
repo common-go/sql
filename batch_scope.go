@@ -512,13 +512,13 @@ func UpdateInTransaction(ctx context.Context, db *sql.DB, tableName string, obje
 		if err1 != nil {
 			return 0, err1
 		}
-		value = append(value, setVal)
 		numKeys := len(scope.Keys)
 		where, whereVal, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &numKeys, n, " and ", buildParam)
 		if err2 != nil {
 			return 0, err2
 		}
-		value = append(value, whereVal)
+		setVal = append(setVal, whereVal...)
+		value = append(value, setVal)
 		query = append(query, fmt.Sprintf(fmt.Sprintf("update %s set %s where %s",
 			tableName,
 			sets,

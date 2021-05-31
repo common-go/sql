@@ -126,8 +126,8 @@ type Statements interface {
 }
 
 func NewDefaultStatements(successFirst bool) *DefaultStatements {
-	stms := make([]Statement, 0)
-	s := &DefaultStatements{Statements: stms, SuccessFirst: successFirst}
+	stmts := make([]Statement, 0)
+	s := &DefaultStatements{Statements: stmts, SuccessFirst: successFirst}
 	return s
 }
 func NewStatements(successFirst bool) Statements {
@@ -405,4 +405,34 @@ func InsertMany(ctx context.Context, db *sql.DB, tableName string, models interf
 		return 0, er2
 	}
 	return x.RowsAffected()
+}
+
+func UpdateMany(ctx context.Context, db *sql.DB, tableName string, models interface{}, options ...func(int) string) (int64, error) {
+	var buildParam func(int) string
+	if len(options) > 0 {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(db)
+	}
+	stmts, er1 := BuildUpdateBatch(tableName, models, buildParam)
+	if er1 != nil {
+		return 0, er1
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	for _, stmt := range stmts {
+		_, execErr := tx.ExecContext(ctx, stmt.Query, stmt.Args...)
+		if execErr != nil {
+			_ = tx.Rollback()
+			return 0, execErr
+		}
+	}
+	err = tx.Commit()
+	if err != nil {
+		return 0, err
+	}
+	total := int64(len(stmts))
+	return total, err
 }

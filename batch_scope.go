@@ -411,69 +411,6 @@ func InterfaceSlice(slice interface{}) ([]interface{}, error) {
 	return ret, nil
 }
 
-func UpdateMany(ctx context.Context, db *sql.DB, tableName string, objects []interface{}, options...func(i int) string) (int64, error) {
-	var placeholder []string
-	driver := GetDriver(db)
-	var buildParam func(i int) string
-	if len(options) > 0 && options[0] != nil {
-		buildParam = options[0]
-	} else {
-		buildParam = GetBuild(db)
-	}
-	var query []string
-	var value [][]interface{}
-	if len(objects) == 0 {
-		return 0, nil
-	}
-	valueDefault := objects[0]
-	statement := newStatement(valueDefault, placeholder...)
-	columns := make([]string, 0) // columns set value for update
-	for _, key := range SortedKeys(statement.Attributes) {
-		columns = append(columns, QuoteByDriver(key, driver))
-	}
-	for _, obj := range objects {
-		scope := newStatement(obj, placeholder...)
-		// Append variables set column
-		for _, key := range SortedKeys(scope.Attributes) {
-			scope.Values = append(scope.Values, scope.Attributes[key])
-		}
-		// Append variables where
-		for _, key := range scope.Keys {
-			scope.Values = append(scope.Values, scope.AttributeKeys[key])
-		}
-		// Also append variables to mainScope
-		//statement.Values = append(statement.Values, scope.Values...)
-
-		n := len(scope.Columns)
-		sets, setVal, err1 := BuildSqlParametersAndValues(scope.Columns, scope.Values, &n, 0, ", ", buildParam)
-		if err1 != nil {
-			return 0, err1
-		}
-		numKeys := len(scope.Keys)
-		where, whereVal, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &numKeys, n, " and ", buildParam)
-		if err2 != nil {
-			return 0, err2
-		}
-		setVal = append(setVal, whereVal...)
-		value = append(value, setVal)
-		query = append(query, fmt.Sprintf(fmt.Sprintf("update %s set %s where %s",
-			tableName,
-			sets,
-			where,
-		)))
-	}
-	var count int64
-	for i := 0; i < len(query); i++ {
-		x, execErr := db.ExecContext(ctx, query[i], value[i]...)
-		if execErr != nil {
-			return 0, execErr
-		}
-		rowsAffected, _ := x.RowsAffected()
-		count += rowsAffected
-	}
-	return count, nil
-}
-
 func UpdateInTransaction(ctx context.Context, db *sql.DB, tableName string, objects []interface{}, options...func(i int) string) (int64, error) {
 	var placeholder []string
 	driver := GetDriver(db)
